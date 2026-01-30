@@ -1,0 +1,164 @@
+---
+title: "Stat 3400 - Project"
+author: "Nahom Taye"
+date: "Due January 28, 2026"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(stats)
+library(knitr)
+library(tinytex)
+library(hoopR)
+library(nbastatR)
+library(dplyr)
+library(purrr)
+library(gdata)
+library(rvest)
+library(stringi)
+library(stringr)
+Sys.setenv(VROOM_CONNECTION_SIZE=80000000000000000000000000000000000000000000000)
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+```
+
+
+
+```{r, data import, include=FALSE}
+rawgamelogs <- load_nba_player_box(seasons = 2025)
+GameLogs <- rawgamelogs %>% 
+  select(game_id, game_date, home_away, athlete_display_name, team_display_name, 
+         opponent_team_display_name, three_point_field_goals_made, minutes, points, 
+         assists, rebounds, steals, blocks, turnovers,fouls,starter,season_type)%>%
+rename(
+    GameNo = game_id,
+    Date = game_date,
+    Location = home_away, 
+    Name = athlete_display_name,
+    Team = team_display_name,
+    Oppnent = opponent_team_display_name,
+    FG3M = three_point_field_goals_made,
+    Minutes = minutes,
+    Points = points,
+    Assists = assists,
+    Rebounds = rebounds,
+    Steals = steals,
+    Blocks = blocks,
+    TO = turnovers,
+    PF = fouls
+  )
+
+```
+
+```{r}
+gameidsraw<- game_logs(
+  seasons = 2025,
+  league = "NBA",
+  result_types = "player",
+  season_types = c("Regular Season", "Playoffs"),
+  nest_data = F,
+  assign_to_environment = TRUE,
+  return_message = TRUE
+)
+
+gameids<- unique(gameidsraw$idGame)
+
+adv<-nba_boxscoreadvancedv2(game_id = 0022400061)
+```
+
+
+```{r import data, include=FALSE}
+
+GameLogs <- rawgamelogs %>% select(idGame,dateGame,isB2B,locationGame,namePlayer,slugTeam,slugOpponent,fg3m,minutes,pts,ast,treb,stl,blk,tov,pf,fpts)%>%
+                      rename.vars(c("idGame","dateGame","isB2B","locationGame","namePlayer","slugTeam","slugOpponent","fg3m","minutes","pts","ast","treb","stl","blk","tov","pf","fpts"),
+                                  c("GameNo","Date","B2B","Location","Name","Team","Opp","FG3M","Minutes","Pts","Ast","Treb","Stl","Blk","TO","PF","FD"))%>%
+  mutate(DBL = if_else(Pts>=10 & Treb >=10|Pts >=10 & Ast >=10|Pts >=10 & Blk >=10|
+                         Pts >=10 & Stl >=10|Treb >=10 & Ast >=10|Treb >=10 & Blk >=10|
+                         Treb >=10 & Stl >=10|Ast >=10 & Blk >= 10|Ast >= 10 & Stl >=10|
+                         Blk>= 10 & Stl>=10,1,0))%>%
+  mutate(TDBL = if_else(Pts>=10 & Treb >=10 & Ast >=10|Pts >=10 & Treb >=10 & Blk >=10|
+                          Pts >=10 & Treb >=10 & Stl >=10|Pts >=10 & Ast >=10 & Stl >=10|Pts >=10 & Ast >=10 & Blk >=10|
+                          Pts >=10 & Blk >=10 & Stl >=10|Treb >=10 & Ast >=10 & Blk >=10|Treb >=10 & Ast >=10 & Stl >=10|
+                          Treb >=10 & Blk >=10 & Stl >=10|Ast >=10 & Blk >= 10 & Stl >=10,1,0))%>%
+  mutate(DK = round(Pts+1.25*Treb+1.5*Ast+2*Stl+2*Blk+1.5*DBL+1.5*TDBL-.5*TO,2))%>%
+  mutate(FDPM = round(FD/Minutes,2))%>%
+  select(-c(DBL,TDBL))%>%
+  relocate(GameNo,.after = Name)%>%
+  arrange(GameNo, desc(Team), desc(Minutes))
+
+
+#pull unique Game Ids to scrape Advanced data
+Gameids <- unique(GameLogs, by ="GameNo")
+
+##Importing Advanced data
+ AdvBoxScore<- box_scores(game_ids = "2240001",
+                  league = "NBA",
+                  box_score_types = c("Advanced"),
+                  result_types = c("team"),
+                  join_data = TRUE,
+                  assign_to_environment = TRUE,
+                  return_message = TRUE)
+ 
+
+GameLogs$Name <-word(GameLogs$Name, 1, 2)
+GameLogs$Name <- stri_trans_general(GameLogs$Name, "Latin-ASCII")
+GameLogs$Name <- gsub('\\.', '',GameLogs$Name)
+GameLogs$Name[GameLogs$Name == "Tristan da"]<- "Tristan Silva"
+GameLogs$Name[GameLogs$Name == "Cui Cui"]<- "Cui Yongxi"
+```
+
+
+```{r postion col, include=FALSE}
+bbreflink <- "https://www.basketball-reference.com/leagues/NBA_2025_totals.html"
+Pos <-read_html(bbreflink) %>% html_nodes("table") %>%
+  .[[1]] %>%
+  html_table()%>%
+  select(2,5)%>%
+  filter(Pos != "Pos" & Pos != "SG-PG" & Pos != "PG-SG" & Pos != "PF-SF" & Pos != "SF-PF"  & Pos != "SF-SG" & Pos != "SG-SF")
+
+
+Pos$Player <-word(Pos$Player, 1, 2)
+Pos$Player <- stri_trans_general(Pos$Player, "Latin-ASCII")
+Pos$Player <- gsub('\\.', '',Pos$Player)
+Pos$Player[Pos$Player == "Gregory Jackson"]<- "GG Jackson"
+Pos$Player[Pos$Player == "Tristan Da"]<- "Tristan Silva"
+Pos$Player[Pos$Player == "Ron Holland"]<- "Ronald Holland"
+Pos$Player[Pos$Player == "Jeenathan Williams"]<- "Nate Williams"
+Pos <- unique(Pos)
+
+match(GameLogs$Name,Pos$Player)
+Pos$Pos[match(GameLogs$Name,Pos$Player)]
+GameLogs$Position <- Pos$Pos[match(GameLogs$Name,Pos$Player)]
+GameLogs<- GameLogs%>%
+  relocate(Position, .after = Name)
+
+na_count <- sum(is.na(GameLogs$Position))
+print(na_count)
+```
+
+
+```{r data modeling, include=FALSE}
+#Partition
+set.seed(1234)
+ind <- sample(2, nrow(data), replace = T, prob = c(.7, .3))
+training <- data[ind==1, 1:]
+test <- data[ind==2, 1:3]
+trainingtarget <- data[ind==1, 4]
+testtarget <- data[ind==2, 4]
+
+
+```
+
+
+```{r model tuing, include=FALSE}
+
+```
+
+
+```{r model tuing, include=FALSE}
+
+```
