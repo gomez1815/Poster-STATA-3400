@@ -1,0 +1,95 @@
+---
+title: "Project Proposal"
+author: "Nahom Taye, Taketo Horigome, Connor Anguilm"
+date: "2026-01-31"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include = FALSE, warning = FALSE, message = FALSE}
+library(stats)
+library(knitr)
+library(tinytex)
+library(dplyr)
+library(purrr)
+library(gdata)
+library(rvest)
+library(stringi)
+library(stringr)
+```
+
+  Basketball, more precisely the NBA, has evolved from opinionated decision making to data driven. These decisions vary from who to draft to how much rest players need. This project is based to explore how specific on and off court actions culminate in a player’s overall impact during games. By applying concepts taught in the class to real world application to determine which specific metrics most accurately predict performance for a player.      
+  
+  The data used for this analysis is through the R packages `nbastatR` and `hoopR`, which serve as direct data ware house to official NBA statistical data. To ensure accuracy we cross-referenced ESPN's game log, another trusted statistical source for sports fans and researchers. Because these sites pull data directly from official league records, the data set is considered both credible and authoritative. During the data cleaning process, we performed string manipulation to align player identities across sources and ultimately removed 10 players who lacked definitive position data on Basketball-Reference; these players who logged less than 1 minute of playing time.
+  
+```{r import n clean data, include= FALSE, warning = FALSE, message = FALSE}
+library(hoopR)
+library(nbastatR)
+Sys.setenv(VROOM_CONNECTION_SIZE=800000000000)
+rawgamelogs <- load_nba_player_box(seasons = 2025)
+GameLogs <- rawgamelogs %>% 
+  select(game_id, game_date, home_away, athlete_display_name, team_display_name, 
+         opponent_team_display_name, three_point_field_goals_made, minutes, points, 
+         assists, rebounds, steals, blocks, turnovers,fouls,starter,season_type)%>%
+rename(
+    GameNo = game_id,
+    Date = game_date,
+    Location = home_away, 
+    Name = athlete_display_name,
+    Team = team_display_name,
+    Oppnent = opponent_team_display_name,
+    FG3M = three_point_field_goals_made,
+    Minutes = minutes,
+    Points = points,
+    Assists = assists,
+    Rebounds = rebounds,
+    Steals = steals,
+    Blocks = blocks,
+    TO = turnovers,
+    PF = fouls
+  )
+GameLogs$Name <-word(GameLogs$Name, 1, 2)
+GameLogs$Name <- stri_trans_general(GameLogs$Name, "Latin-ASCII")
+GameLogs$Name <- gsub('\\.', '',GameLogs$Name)
+GameLogs$Name[GameLogs$Name == "Tristan da"]<- "Tristan Silva"
+```
+
+
+```{r postion col, include = FALSE}
+bbreflink <- "https://www.basketball-reference.com/leagues/NBA_2025_totals.html"
+Pos <-read_html(bbreflink) %>% html_nodes("table") %>%
+  .[[1]] %>%
+  html_table()%>%
+  select(2,5)%>%
+  filter(Pos != "Pos" & Pos != "SG-PG" & Pos != "PG-SG" & Pos != "PF-SF" & 
+         Pos != "SF-PF"  &    Pos != "SF-SG" & Pos != "SG-SF")
+
+Pos$Player <-word(Pos$Player, 1, 2)
+Pos$Player <- stri_trans_general(Pos$Player, "Latin-ASCII")
+Pos$Player <- gsub('\\.', '',Pos$Player)
+Pos$Player[Pos$Player == "Gregory Jackson"]<- "GG Jackson"
+Pos$Player[Pos$Player == "Tristan Da"]<- "Tristan Silva"
+Pos$Player[Pos$Player == "Ron Holland"]<- "Ronald Holland"
+Pos$Player[Pos$Player == "Jeenathan Williams"]<- "Nate Williams"
+Pos$Player[Pos$Player == "Cui Yongxi"]<- "Yongxi Cui"
+Pos <- unique(Pos)
+
+GameLogs$Position <- Pos$Pos[match(GameLogs$Name,Pos$Player)]
+GameLogs<- GameLogs%>%
+  relocate(Position, .after = Name)%>%
+  filter(!is.na(Position)) #removes 10 unique players whose position not listed on bbref
+
+na_count <- sum(is.na(GameLogs$Position))
+print(na_count)
+```
+
+Instead of having to sample, this study uses the whole of the 2024/25 NBA season. The data set includes every player who logged a playing time, besides those mentioned as not having a Position data in Basketball Reference,representing the entire population of NBA athletes who participated in the regular-season. This informs us about the league as whole rather than snippets. The data set consists of 32,166 observations. Each entry represents a performance in each game he participated in, allowing us to track players performance throughout the season. This structure is statistically advantageous given the mere size, we can significantly reduce the variance of our estimators and increase the accuracy of our model.
+
+This research focuses on a single response variable, Fantasy Points, which is a continuous numerical variable that compounds a players performance into a singular metric. To predict the outcome, we chose what we believe are important to players performance on a given night, for both on and off the court. The numerical predictors are Minutes Played, Usage rate, Personal Fouls and Plus/Minus, where Minutes Played and Usage Rate are continuous variables while Personal Fouls and Plus/Minus are discrete variables. These combinations of continuous and discrete values that account for a player's opportunity and efficiency while on the court.
+
+And these numerical predictors are accompanied by categorical predictors: Opponent, Game Location, Back-to-back status and Starting Status. We believe that Starting Status is a particularly significant categorical variable as it identifies a player's designated role and expected volume of opportunity for that specific match up. By modeling on these predictor variables we hope to tell a complete story of what drives elite performance in the modern NBA.
+
+
+
