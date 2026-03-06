@@ -1,0 +1,55 @@
+---
+title: "poster draft"
+author: "Nahom Taye"
+date: "2026-03-05"
+output: pdf_document
+---
+
+```{r setup, include = FALSE, warning = FALSE, message = FALSE}
+library(stats)
+library(knitr)
+library(tinytex)
+library(dplyr)
+library(purrr)
+library(gdata)
+library(rvest)
+library(stringi)
+library(stringr)
+library(hoopR)
+library(nbastatR)
+```
+##Introduction
+
+This project is intended to predict an NBA player's fantasy points nightly performance given their minutes, average usage, game location and their position as well as starting status ampng other numerical predictors.  
+
+```{r data collection}
+todf<-read_csv("/Users/olio/Desktop/r for classses/classes/appreg/project/2020.21.csv")
+GameLogs <- todf%>% select(idGame, idPlayer, Player, Pos, isStarter, isB2B, locationGame,
+                           slugOpponent, minExact, pctUSG, pf, plusminus,fpts)%>%
+  rename(GameID = idGame,
+         PlayerID = idPlayer,
+         Position = Pos,
+         StartingStatus = isStarter,
+         Back2BackStatus = isB2B,
+         Location = locationGame,
+         Opponenet = slugOpponent,
+         Minutes = minExact,
+         UsageRate = pctUSG,
+         PersonalFouls = pf,
+         PlusMinus = plusminus,
+         FantasyPoints = fpts)
+```
+
+```{r graphs, include = TRUE}
+str(GameLogs)
+```
+
+
+```{r, echo=FALSE}
+
+FantasyPointsDist<- ggplot(data = GameLogs, aes(x = FantasyPoints)) +
+  geom_histogram(color = "black", fill = "#CFB87C") 
+FantasyPointsDist
+```
+
+
