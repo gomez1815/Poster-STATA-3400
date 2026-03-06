@@ -1,0 +1,151 @@
+---
+title: "poster draft"
+author: "Nahom Taye"
+date: "2026-03-05"
+output: pdf_document
+---
+
+```{r setup, include = FALSE, warning = FALSE, message = FALSE}
+library(stats)
+library(knitr)
+library(tinytex)
+library(dplyr)
+library(purrr)
+library(gdata)
+library(rvest)
+library(stringi)
+library(stringr)
+library(hoopR)
+library(nbastatR)
+```
+##Introduction
+
+This project is intended to predict an NBA player's fantasy points nightly performance given their minutes, average usage, game location and their position as well as starting status ampng other numerical predictors.  
+
+```{r data collection}
+todf<-read_csv("2020.21.csv")
+GameLogs <- todf%>% select(idGame, idPlayer, Player, Pos, isStarter, isB2B, locationGame,
+                           slugOpponent, minExact, pctUSG, pf, plusminus,fpts, pts, outcomeGame, locationGame, fta, pctFG3, ratioASTtoTOV)%>%
+  rename(GameID = idGame,
+         PlayerID = idPlayer,
+         Position = Pos,
+         StartingStatus = isStarter,
+         Back2BackStatus = isB2B,
+         Location = locationGame,
+         Opponenet = slugOpponent,
+         Minutes = minExact,
+         UsageRate = pctUSG,
+         PersonalFouls = pf,
+         PlusMinus = plusminus,
+         FantasyPoints = fpts,
+         Points = pts,
+         WL = outcomeGame,
+         home_away = locationGame,
+         free_throws = fta,
+         Three_PointPct = pctFG3,
+         A_T_Ratio = ratioASTtoTOV)
+```
+
+```{r graphs, include = TRUE}
+str(GameLogs)
+```
+
+
+```{r, echo=FALSE}
+
+FantasyPointsDist<- ggplot(data = GameLogs, aes(x = FantasyPoints)) +
+  geom_histogram(color = "black", fill = "#CFB87C") 
+FantasyPointsDist
+```
+
+
+```{r}
+Model2 <- ggplot(data = GameLogs, aes(x = Points, y = FantasyPoints)) +
+  geom_point(color = "grey") +
+  geom_smooth(method = "lm", formula = y ~ poly(x, 2), color = "green") +
+  labs(
+    x = "Points",
+    y = "Fantasy Points"
+  ) +
+  theme_bw()
+Model2
+```
+
+
+
+```{r}
+Model3 <- ggplot(data = GameLogs, aes(x = Minutes, y = FantasyPoints)) +
+  geom_point(color = "Blue", alpha = 0.3) +
+  geom_smooth(method = "lm", formula = y ~ poly(x, 2), color = "red") +
+  labs(
+    title = "Fantasy Points vs Minutes 20-21 NBA Season",
+    x = "Minutes",
+    y = "Fantasy Points"
+  ) +
+  theme_bw()
+Model3
+```
+```{r}
+Model4 <- ggplot(data = GameLogs, aes(x = free_throws, y = FantasyPoints)) +
+  geom_point(color = "Blue", alpha = 0.3) +
+  geom_smooth(method = "lm", formula = y ~ poly(x, 2), color = "red") +
+  labs(
+    title = "Fantasy Points vs Free throws attempted 20-21 NBA Season",
+    x = "Free Throws atempted",
+    y = "Fantasy Points"
+  ) +
+  theme_bw()
+Model4
+```
+```{r}
+grouped_data <- split(GameLogs, GameLogs$Position)
+Model5 <- ggplot(data = GameLogs, aes(x = Three_PointPct, y = FantasyPoints)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_wrap(~ Position) +
+  theme_minimal()
+Model5
+```
+```{r}
+Model6 <- ggplot(data = GameLogs, aes(x = A_T_Ratio, y = FantasyPoints)) +
+  geom_point(color = "Blue", alpha = 0.3) +
+  geom_smooth(method = "lm", se=FALSE, color = "green") +
+  labs(
+    title = "Fantasy Points vs Assist Turnover Ratio 20-21 NBA Season",
+    x = "Assist to Trunover Ratio",
+    y = "Fantasy Points"
+  ) +
+  theme_bw()
+Model6
+```
+
+```{r}
+Starters <- GameLogs %>%
+                    filter(StartingStatus == "TRUE")
+ggplot(data = Starters, aes(x = FantasyPoints, y = home_away)) +
+  geom_jitter(height = 0.05, size = 2, alpha = 0.2) +
+  geom_smooth(
+    formula = y ~ x, method = "glm",
+    method.args = list(family = "binomial"), se = FALSE, color = "blue"
+  ) +
+  labs(
+    title = "Win Loss based on Fantasy Scores",
+    x = "Fantasy Points",
+    y = "Probability of Win or Loss",
+    caption = "Nba StatR. (2021)"
+  ) +
+  theme_bw()
+```
+
+```{r}
+df_filtered <- GameLogs %>%
+  filter(FantasyPoints < 45)
+ggplot(df_filtered, aes(x=FantasyPoints, y=Position)) +
+  geom_boxplot()+
+  labs(
+    title = "Fantasy Points by Position",
+    x = "Fantasy Points",
+    y = "Position",
+    caption = "Nba StatR. (2021)")
+```
+
