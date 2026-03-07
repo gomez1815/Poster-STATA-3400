@@ -1,0 +1,143 @@
+---
+title: "Technical Conditions (LI)"
+author: "Dr. Josh Jacobson"
+date: "13 February 2026"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE,warning=FALSE,message=FALSE}
+library(here)
+library(knitr)
+library(tinytex)
+library(tidyverse)
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(out.width = "60%", fig.align = "center")
+```
+
+*These lecture notes were originally developed by Dr. Kris Pruitt.*
+
+The purpose of this lesson is to introduce methods for checking the first two technical conditions (assumptions) of linear regression. Specifically, we investigate and diagnose violations of linearity and independence. In the next lesson, we evaluate the Normality and equal variance conditions that complete the acronym (LINE).
+
+# Linearity
+
+The first technical condition for fitting a linear regression model is, appropriately, **linearity**. A simple linear regression model attempts to estimate the parameters of the following function:
+
+$$
+y=\beta_0 + \beta_1x + \epsilon
+$$
+
+This function is inherently linear, so it would make no sense to attempt to fit such a model to a nonlinear association. Thus, we begin by exploring diagnostic methods for checking the linearity assumption. For this example, we will employ a sample of fish caught in a lake in Finland. The data includes the fish species, height, weight, width, and various lengths to different parts of the tail. The weights are in grams and all other measurements are in centimeters.
+
+```{r}
+# import fish data
+fish <- read_csv("fish.csv") %>%
+  filter(Weight > 0) %>%
+  transmute(Weight, Length = Length1) %>%
+  na.omit()
+```
+
+Suppose we are interested in the association between a fish's length (predictor) and its weight (response). We might begin the analysis of this association with a scatter plot.
+
+```{r}
+# plot length versus weight
+ggplot(data = fish, aes(x = Length, y = Weight)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_x_continuous(limits = c(5, 45), breaks = seq(5, 45, 5)) +
+  scale_y_continuous(limits = c(0, 1200), breaks = seq(0, 1200, 100)) +
+  labs(
+    title = "Fish Caught in Finland",
+    x = "Length (cm)",
+    y = "Weight (g)",
+    caption = "Brofeldt (1917)"
+  ) +
+  theme_bw()
+```
+
+Clearly length and weight are associated in a nonlinear manner. It seems silly to try and fit a linear function (blue line) to this data. Notice all of the observations start out above the regression line, then they are almost exclusively below the line, then they are once again all above the line. This is a clear indication that the linearity assumption is violated.
+
+Another visual method for assessing linearity is to use a diagnostic plot of the residuals after fitting the regression line. Let's fit a linear model and generate the first default diagnostic plot.
+
+```{r}
+# fit linear regression model
+model1 <- lm(Weight ~ Length, data = fish)
+
+# display first diagnostic plot
+plot(model1, which = 1)
+```
+
+This diagnostic is called a Residuals versus Fitted plot. The purpose of this plot is to look for patterns in the residual values across the range of predicted (fitted) values. Ideally, there would be *no* pattern. We need the residuals to vary randomly above and below the average value of zero. This is equivalent to the observations varying randomly above and below the fitted line. But we do not see that behavior here. Instead, the red line in the plot indicates a nonlinear pattern in the residuals, which in turn suggests a nonlinear relationship in the original data.
+
+Based on two separate visual diagnostics, the association between a fish's length and weight violates the linearity assumption. Thus, we are using the **wrong model**. We can remedy this by transforming the predictor variable (e.g., quadratic or exponential) or by pursuing more advanced nonlinear models. Let's try a cubic transformation.
+
+```{r}
+# add cubed length to data
+fish2 <- fish %>%
+  mutate(Cubed_Length = Length^3)
+
+# plot cubed length versus weight
+ggplot(data = fish2, aes(x = Cubed_Length, y = Weight)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_x_continuous(limits = c(0, 70000), breaks = seq(0, 70000, 10000)) +
+  scale_y_continuous(limits = c(0, 1200), breaks = seq(0, 1200, 200)) +
+  labs(
+    title = "Fish Caught in Finland",
+    x = "Cubed Length (cm)",
+    y = "Weight (g)",
+    caption = "Brofeldt (1917)"
+  ) +
+  theme_bw()
+```
+
+The association between cubed length and weight appears much more linear. This makes intuitive sense as well. The weight of a fish is likely related to its volume and volume is a cubic concept. We can also confirm this in the Residuals versus Fitted plot.
+
+```{r}
+# fit linear regression model
+model2 <- lm(Weight ~ Cubed_Length, data = fish2)
+
+# display first diagnostic plot
+plot(model2, which = 1)
+```
+
+While still not perfect, the red line is much flatter compared to the untransformed model. The residuals vary above and below zero with a less predictable pattern than before. Thus, our transformed model appears linear. What other types of transformations might have worked? With the linearity assumption intact, we move onto the next technical condition.
+
+# Independence
+
+The second model condition in the LINE acronym is **independence**. As with almost all of the statistical techniques we've studied in this course, the observations in the sample must be independent of one another. Otherwise, our parameter estimates could be biased and unrepresentative of the true association in the population. For regression, the independence actually refers to the residuals, but the idea is the same. Common sources of dependence are:
+
+-   Proximity in time
+-   Proximity in space
+-   Repetition
+
+If sample observations are gathered in such a way that they are close in time or space, then the residuals often violate independence. Similarly, if observations are frequently repeated via administrative errors, then the residuals could be dependent. The best method for avoiding violations of independence is to gather a random sample.
+
+Returning to the fish example, we first consider logical assessments of independence. In other words, does it make sense that the measurements of one fish in this Finnish lake would influence the measurements of another fish? Possibly yes! There is obviously proximity in space. All of these fish live in the same lake, so it is possible that some of them are from the same bloodline. If a larger fish is more likely to produce larger offspring, then the measurements of some fish could be dependent. Similarly, if all of the fish were caught within a short time frame (i.e., days or weeks), then there could be seasonal patterns that violate independence due to proximity in time.
+
+Conceptually, it can be difficult to determine violations of independence after the fact. We might like to ask the people who caught the fish, but given this study was conducted in Finland in 1917 that would be challenging to say the least. Ideally, we could have controlled this experiment by randomly choosing different locations on the lake at different times and seasons. However, we do not have that luxury. Instead, we must decide whether the potential violations are significant enough to invalidate our results. Though conceptual thought experiments are a good start, we would also like more objective methods for assessing independence.
+
+When dealing with time series data (i.e., time is a predictor variable), independence is often violated due to autocorrelation (aka serial correlation). This issue appears when the response variable changes over time in some predictable manner. One common analytic method for testing for autocorrelation is the **Durbin-Watson Test**. The Durbin-Watson method is a hypothesis test that assumes no serial correlation in the residuals (null) and then looks for evidence of correlation using time lags (alternate). However, this method is not appropriate in our case, because we have no concept of time lags in our data.
+
+For non-time series data like ours, we can look for patterns in the residuals as a function of the predictor variable(s). If the residuals consistently have the same sign (positive or negative) for a particular range of predictor values, then independence could be violated. In our case, we want to review a plot of the cubed length of the fish versus the residual error.
+
+```{r}
+# add residuals to data
+fish3 <- fish2 %>%
+  mutate(residuals = resid(model2))
+
+# plot weight versus residuals
+ggplot(data = fish3, aes(x = Cubed_Length, y = residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  labs(
+    x = "Cubed Length (cm)",
+    y = "Residual Error (g)"
+  ) +
+  theme_bw()
+```
+
+There is no clear pattern in this plot in terms of the sign of the residuals. As the predictor variable increases, the residuals randomly display both positive and negative values. The only pattern we do notice is that the residuals get larger (in absolute value) as the predictor increases. But this issue is related to the fourth technical condition. With no obvious violations of independence we move onto the remaining assumptions in the next lesson.

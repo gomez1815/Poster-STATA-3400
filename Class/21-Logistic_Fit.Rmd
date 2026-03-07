@@ -1,0 +1,154 @@
+---
+title: "Quality of Model Fit"
+author: "Dr. Josh Jacobson"
+date: "2 March 2026"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE,message=FALSE,warning=FALSE}
+library(here)
+library(knitr)
+library(tinytex)
+library(tidyverse)
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(out.width = "60%", fig.align = "center")
+```
+
+*These lecture notes were originally developed by Dr. Kris Pruitt.*
+
+The purpose of this lesson is to compute and interpret common metrics for how well a simple logistic regression model fits the training data. Specifically, we discuss deviance and the Akaike Information Criterion.
+
+# Deviance
+
+In previous lessons we introduced the log-likelihood ($\log(L)$) as the objective function for the method of maximum likelihood. Thus, log-likelihood plays a similar role in logistic regression as residual sum of squares (RSS) does for linear regression. Furthermore, we used RSS to calculate a common metric for the fit of a linear model called the residual standard error (RSE). Similarly, we use log-likelihood to compute a metric for the fit of a logistic model called **deviance**. The deviance ($D$) of a logistic regression model is computed as follows.
+
+$$
+D= -2 \log(L)
+$$
+
+The better a logistic model fits the training data, the *smaller* the deviance. The term deviance refers to how far our fitted model deviates from a theoretical perfect model. The perfect model is sometimes called the *saturated* model and includes a parameter for every observation in the training data. Intuitively, the saturated model "connects the dots" in a scatter plot and thus perfectly classifies each observation. Hence a smaller deviance implies we are closer to this perfect model.
+
+Let's compute and interpret deviance in an example. Recall the breast cancer data where our goal is to explain diagnosis based on cell radius. Import and visualize the data below.
+
+```{r}
+# import and wrangle data
+cancer <- read_csv("cancer.csv") %>%
+  transmute(
+    Diagnosis = ifelse(diagnosis == "M", 1, 0),
+    Radius = radius_mean,
+    Texture = texture_mean
+  ) %>%
+  na.omit()
+
+# create scatter plot
+ggplot(data = cancer, aes(x = Radius, y = Diagnosis)) +
+  geom_jitter(height = 0.05, size = 2, alpha = 0.5) +
+  geom_smooth(
+    formula = y ~ x, method = "glm",
+    method.args = list(family = "binomial"), se = FALSE, color = "blue"
+  ) +
+  geom_hline(yintercept = mean(cancer$Diagnosis), color = "red") +
+  labs(
+    title = "Measurements of Breast Cancer Cells",
+    x = "Radius (pixels)",
+    y = "Probability of Malignant",
+    caption = "Source: Street et al. (1993)"
+  ) +
+  scale_y_continuous(limits = c(-0.05, 1.05), breaks = seq(0, 1, 0.1)) +
+  scale_x_continuous(limits = c(5, 30), breaks = seq(5, 30, 5)) +
+  theme_bw()
+```
+
+The blue curve represents the best-fit logistic function using the maximum likelihood method. The red line is the **prevalence** of malignant observations in the training data. In other words, 37% of the observations are malignant. Consequently, we could simply classify every observation as benign and be correct 63% of the time. Our hope is that the fitted model performs better than this null model. We obtain metrics for the fitted model from the summary output of the `glm()` function.
+
+```{r}
+# fit logistic regression model
+model <- glm(Diagnosis ~ Radius, data = cancer, family = "binomial")
+
+# view summary output
+summary(model)
+```
+
+Notice that the output provides two types of deviance: null and residual. The null deviance references the null model. Just as with linear regression, the null model always predicts the mean response. But, with a binary response, the mean is the proportion of observations that are equal to one (i.e., the prevalence). If we execute the maximum likelihood method using only the prevalence in the training data, then we obtain a null deviance. For our example, the null deviance is 751.44.
+
+The residual deviance indicates the improvement in the model by including explanatory variables. Thus, we want a residual deviance that is much smaller than the null deviance. This indicates a model that fits the training data much better than the prevalence alone. In our case, the residual deviance is 330.01. So, we have cut the deviance by more than half. Using the two types of deviance, we can compute a *pseudo* R-squared value.
+
+```{r}
+# compute pseudo R-squared
+1 - (330.1 / 751.44)
+```
+
+Based on this calculation, we have eliminated 56% of the deviance in the model by including cell radius as an explanatory variable. Just like the R-squared for linear regression, a value close to 1 indicates a model that fits the data well. In fact, a value exactly equal to 1 would mean we have achieved the saturated (perfect) model.
+
+# Akaike Information Criterion
+
+Another common metric for the fit of a logistic regression model is the Akaike Information Criterion (AIC), which is named after Japanese statistician Hirotsugu Akaike. The formula for AIC includes the deviance, but also penalizes models for including variables with little explanatory power. For a model that estimates $k$ parameters (including the intercept), the AIC is computed as follows.
+
+$$
+\text{AIC}=D + 2k 
+$$
+
+Just like the deviance, we prefer a small AIC. However, adding more variables to the model increases the AIC. Ideally, the additional variables reduce the deviance enough to account for this increase. In a sense, AIC is an adjusted deviance similar to adjusted R-squared in linear regression. Models with more explanatory variables will *always* have a lower deviance. Thus, we use AIC when comparing models with differing numbers of variables.
+
+For our breast cancer example, the residual deviance is $D=330.01$ and we are estimating $k=2$ parameters ($\beta_0$ and $\beta_1$). As a result, the AIC is equal to 334.01. This precise value is provided in the summary output of the model. If we want to compare the simple logistic regression model to a *multiple* logistic regression model, then we should use AIC. For example, suppose we want to add cell texture as an explanatory variable.
+
+```{r}
+# fit logistic regression model
+model2 <- glm(Diagnosis ~ Radius + Texture, data = cancer, family = "binomial")
+
+# extract AIC
+summary(model2)
+```
+
+The AIC for the multiple logistic regression model is 297.12, which is smaller than 334.01. Hence, the additional variable reduces the deviance enough to overcome the penalty term in the AIC formula. This indicates that texture adds explanatory power to the model.
+
+# Likelihood Ratio Test
+
+In multiple *linear* regression, we tested the overall significance of the model using ANOVA and the $F$-distribution. Specifically, we completed a hypothesis test that assumes all $\beta_j=0$ and evaluates evidence that at least one $\beta_j \ne 0$. The equivalent test for multiple *logistic* regression is the likelihood ratio test and the $\chi^2$-distribution. Let's complete this test for `model2` from the previous section. We begin with the hypotheses:
+
+$$
+\begin{aligned}
+H_0:& \; \beta_1=\beta_2=0 \\
+H_A:& \; \text{At least one} \; \beta_j \neq 0
+\end{aligned}
+$$
+
+Next, we select a significance level of $\alpha=0.01$. The test statistic for the likelihood ratio test is the difference in the deviances. As the title of the test suggests, this is derived from the ratio of likelihoods. If $L_0$ is the likelihood of the null model and $L_1$ is the likelihood of our fitted model, then we compute the test statistic in the following manner:
+
+$$
+\begin{aligned}
+\text{Test Stat} &= -2\log\left(\frac{L_0}{L_1}\right) \\
+&= -2[\log(L_0)-\log(L_1)] \\
+&= -2\log(L_0)-[-2\log(L_1)] \\
+&= D_0-D_1
+\end{aligned}
+$$
+
+From the model summary output, we know $D_0=751.44$ and $D_1=291.12$. Thus, our test statistic is the difference of 460.32. If the null hypothesis is true, then this test statistic follows the $\chi^2$-distribution with $k$ degrees of freedom. In this case, $k$ is equivalent to the number of predictors (i.e., 2) in our fitted model. We simulate the appropriate null distribution below.
+
+```{r}
+# simulate Chi-squared-distribution
+set.seed(303)
+chidist <- data.frame(chistat = rchisq(n = 2000, df = 2))
+
+# plot null distribution
+ggplot(data = chidist, aes(x = chistat)) +
+  geom_density(color = "black", fill = "#CFB87C", adjust = 2) +
+  geom_vline(
+    xintercept = qchisq(p = 0.01, df = 2, lower.tail = FALSE),
+    color = "red", linewidth = 1, linetype = "dashed"
+  ) +
+  labs(
+    title = "Breast Cancer Cell Diagnosis",
+    subtitle = "Null Distribution",
+    x = "Chi-Squared Statistic",
+    y = "Density"
+  ) +
+  theme_bw()
+```
+
+Based on our significance level of $\alpha=0.01$, we would reject the null hypothesis for any test statistic beyond about 9.2. Hence, our statistic of 460.32 is more than enough to reject the null. In other words, there is significant statistic evidence that at least one of our predictors (Radius and Texture) is associated with Diagnosis.

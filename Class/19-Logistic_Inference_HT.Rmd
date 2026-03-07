@@ -1,0 +1,228 @@
+---
+title: 'Logistic Inference: Hypothesis Testing'
+author: "Dr. Josh Jacobson"
+date: "25 February 2026"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE,warning=FALSE,message=FALSE}
+library(here)
+library(knitr)
+library(tinytex)
+library(tidyverse)
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(out.width = "60%", fig.align = "center")
+```
+
+*These lecture notes were originally developed by Dr. Kris Pruitt.*
+
+The purpose of this lesson is to demonstrate computational and mathematical methods for conducting hypothesis tests on the slope parameter of a simple logistic regression model.
+
+# Estimate the Logistic Model
+
+Suppose we are interested in explaining the status of breast cancer cells as malignant (1) or benign (0). Given this scenario includes a binary response, we are conducting classification (versus regression). We will employ data from the breast cancer research by Street et al. (1993) at the University of Wisconsin. In this work, researchers use measurements from imagery of breast tumor biopsies to classify cells as malignant or benign. Though there are many explanatory variables available, we choose the radius of the cell nuclei. Import, wrangle, and visualize the data below.
+
+```{r}
+# import and wrangle data
+cancer <- read_csv("cancer.csv") %>%
+  transmute(
+    Diagnosis = ifelse(diagnosis == "M", 1, 0),
+    Radius = radius_mean
+  ) %>%
+  na.omit()
+
+# create scatter plot
+ggplot(data = cancer, aes(x = Radius, y = Diagnosis)) +
+  geom_jitter(height = 0.05, size = 2, alpha = 0.5) +
+  geom_smooth(
+    formula = y ~ x, method = "glm",
+    method.args = list(family = "binomial"), se = FALSE, color = "blue"
+  ) +
+  labs(
+    title = "Measurements of Breast Cancer Cells",
+    x = "Radius (pixels)",
+    y = "Probability of Malignant",
+    caption = "Source: Street et al. (1993)"
+  ) +
+  scale_y_continuous(limits = c(-0.05, 1.05), breaks = seq(0, 1, 0.1)) +
+  scale_x_continuous(limits = c(5, 30), breaks = seq(5, 30, 5)) +
+  theme_bw()
+```
+
+Our data consists of 569 diagnosed tumor cells along with the radius (pixels). Based on the scatter plot, there does appear to be some positive association between cell radius and diagnosis. Specifically, the larger the radius of the cell the more likely it is malignant. The strength of association between a continuous predictor and binary response can be measured using the **point-biserial correlation coefficient**. However, for this particular pairing of variables, the coefficient is equivalent to that of Pearson.
+
+```{r}
+# compute Pearson correlation
+cor(cancer$Radius, cancer$Diagnosis,
+  method = "pearson"
+)
+```
+
+Thus, there is a moderate-to-strong correlation between a cell's radius and its diagnosis. The blue curve represents the best-fit logistic function for this association using the maximum likelihood method. We obtain point estimates for the parameters of the model using the `glm()` function.
+
+```{r}
+# fit logistic regression model
+model <- glm(Diagnosis ~ Radius, data = cancer, family = "binomial")
+
+# view estimates coefficients
+coefficients(summary(model))
+```
+
+Based on the summary output, the equation for the best-fit logistic curve is shown below.
+
+$$
+P(\text{Malignant}|\text{Radius}=x)=\frac{1}{1+e^{-(1.034x-15.246)}}
+$$
+
+A common alternative representation of the logistic function is the **log-odds** function. With a bit of algebra we can derive the mathematically-equivalent relationship below.
+
+$$
+\log\left(\frac{P(\text{Malignant}|\text{Radius}=x)}{P(\text{Benign}|\text{Radius}=x)}\right)=1.034x-15.246
+$$
+
+Thus, the association between the radius of a cancer cell and the log-odds of being malignant is *linear*. With this representation, it is clear that $\beta_1$ is a slope coefficient just as in linear regression. In other words, a one pixel increase in cell radius is expected to increase the *log-odds* of being malignant by 1.034. As with any slope parameter, we are interested in whether its value differs from zero. So, we conduct a hypothesis test.
+
+# Computational Hypothesis Test
+
+The hypotheses for our test are:
+
+$$
+\begin{aligned}
+H_0: \; \beta_1=0 \\
+H_A: \; \beta_1 \neq 0
+\end{aligned}
+$$
+
+Given the importance of this context, we choose a significance level of $\alpha=0.01$. We already obtained our point estimate $\hat{\beta}_1=1.034$ from the summary output of the model. Now we require a null distribution.
+
+## Activity
+
+Use sampling to construct a randomized null distribution.
+
+```{r}
+# initiate empty vector
+results <- data.frame(beta1 = rep(NA, 1000))
+
+# repeat randomization process 1000 times and save results
+for (i in 1:1000) {
+  set.seed(i)
+  shuffle <- cancer %>%
+    mutate(
+      shuffle_diagnosis = factor(
+        sample(as.character(Diagnosis), size = n(), replace = FALSE),
+        levels = levels(cancer$Diagnosis)
+      )
+    )
+
+  remodel <- glm(shuffle_diagnosis ~ Radius,
+                 data = shuffle,
+                 family = binomial())
+  
+  # Step 1: Using the cancer data, randomly permute the rows
+  # of the Diagnosis column; call the result "shuffle"
+  
+  
+  # Step 2: Using the "shuffle" data, fit a logistic regression
+  # model for Diagnosis with Radius as a predictor; call it "remodel"
+  
+  results$beta1[i] <- coefficients(summary(remodel))[2, 1]
+}
+```
+
+We can then plot a histogram of our samples from the null distribution, along with the rejection region.
+
+```{r}
+# compute rejection thresholds
+threshold1 <- as.numeric(quantile(results$beta1, 0.005))
+threshold2 <- as.numeric(quantile(results$beta1, 0.995))
+
+# plot null distribution
+ggplot(data = results, aes(x = beta1)) +
+  geom_histogram(color = "black", fill = "#CFB87C") +
+  geom_vline(
+    xintercept = threshold1, color = "red",
+    linewidth = 1, linetype = "dashed"
+  ) +
+  geom_vline(
+    xintercept = threshold2, color = "red",
+    linewidth = 1, linetype = "dashed"
+  ) +
+  labs(
+    title = "Null Distribution",
+    subtitle = "Test Statistic of 1.034",
+    x = "Estimated Radius Coefficient",
+    y = "Count"
+  ) +
+  theme_bw()
+```
+
+Based on our significance level, we might expect to observe radius coefficients between about plus-or-minus 0.07 even if there is no association with diagnosis. However, our test statistic is 1.034 which is well beyond the threshold to reject. Thus, we have significant statistical evidence to suggest the true coefficient on radius differs from zero. In other words, there *is* some association between cell radius and diagnosis.
+
+# Mathematical Hypothesis Test
+
+We can also apply mathematical approaches for hypothesis tests on the slope. Previously, we used randomization to generate a null distribution. Now we will leverage the asymptotic Normality of maximum likelihood estimators. Our hypotheses remain the same.
+
+$$
+\begin{aligned}
+H_0: \; \beta_1=0 \\
+H_A: \; \beta_1 \neq 0
+\end{aligned}
+$$
+
+As before, we define $\beta_1$ as the true slope parameter in the log-odds function. Our null hypothesis suggests this slope is equal to zero, while the alternate claims it is not equal to zero. We'll choose the same significance level of $\alpha=0.01$ and the test statistic is $\hat{\beta}_1=1.034$.
+
+Rather than generating a randomized null distribution, we assume it is standard Normal (mean of 0 and standard deviation of 1). The work of the famous statistician Abraham Wald supports this assumption under certain conditions, including that the sample is **large** and **random**. We transform our test statistic to standard Normal ($z$) by subtracting the null value (in this case 0) and dividing by the standard error, as shown below.
+
+$$
+z=\frac{\hat{\beta}_1-0}{SE_{\hat{\beta}_1}}=\frac{1.034}{0.093}=11.106
+$$
+
+Here we extracted the standard error of the slope parameter from the summary output in an earlier section. The resulting $z$ value matches what is in the summary output as well. We could compute the standard error manually, but the formula requires inverting the matrix of second-order partial derivatives of the log-likelihood function. This matrix is known as the **Fisher Information Matrix** and is essential for estimating the standard errors of the model parameters. We'll forgo the manual computation here and extract the covariance matrix directly from the summary output.
+
+```{r}
+# extract covariance matrix
+summary(model)$cov.unscaled
+```
+
+The diagonal elements of this matrix represent the variances of $\hat{\beta}_0$ and $\hat{\beta}_1$. Thus, the variance of the radius coefficient is 0.00867 and its square root (0.09311) is the standard deviation (standard error). This matches the value from the summary output. With a standardized test statistic, we can now compare it to the theoretical null distribution below.
+
+```{r}
+# simulate Standard Normal distribution
+set.seed(303)
+null <- data.frame(slope = rnorm(n = 10000, mean = 0, sd = 1))
+
+# plot null distribution
+ggplot(data = null, aes(x = slope)) +
+  geom_density(color = "black", fill = "#CFB87C", adjust = 2) +
+  geom_vline(
+    xintercept = qnorm(p = 0.005, mean = 0, sd = 1),
+    color = "red", linewidth = 1, linetype = "dashed"
+  ) +
+  geom_vline(
+    xintercept = qnorm(p = 0.995, mean = 0, sd = 1),
+    color = "red", linewidth = 1, linetype = "dashed"
+  ) +
+  labs(
+    title = "Standard Normal Null Distribution",
+    subtitle = "Test Statistic of 11.106",
+    x = "Estimated Slope",
+    y = "Density"
+  ) +
+  scale_x_continuous(limits = c(-4, 4), breaks = seq(-4, 4, 1)) +
+  theme_bw()
+```
+
+Based on the rejection thresholds, we would reject the null hypothesis for any test statistic beyond about $\pm 2.5$. Since our observed test statistic is greater than 11, we clearly reject the null hypothesis. Another approach is to compute the p-value and compare it to the significance level.
+
+```{r}
+# compute p-value
+2 * pnorm(q = 11.106, mean = 0, sd = 1, lower.tail = FALSE)
+```
+
+The p-value is effectively zero and clearly less than $\alpha=0.01$. Thus, we reject the null hypothesis. Once again, there is significant statistical evidence to suggest that the true slope parameter is *not* zero. In other words, there *is* some association between cell radius and diagnosis.

@@ -1,0 +1,155 @@
+---
+title: "Quality of the Model Fit"
+author: "Dr. Josh Jacobson"
+date: "28 January 2026"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE,message=FALSE,warning=FALSE}
+library(here)
+library(knitr)
+library(tinytex)
+library(tidyverse)
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(out.width = "60%", fig.align = "center")
+```
+
+*These lecture notes were originally developed by Dr. Kris Pruitt.*
+
+The purpose of this lesson is to compute and interpret common metrics for how well a simple linear regression model fits the training data. Specifically, we discuss residual standard error and the coefficient of determination.
+
+# Residual Standard Error
+
+In the previous lessons, we conducted inferential analyses to assess evidence of an association between an explanatory variable $x$ and a response variable $y$. When we find evidence of *some* association, the next logical question is "how strong" is the association. Said another way, we often want to know how well the linear model fits the sample data. This is a different metric than prediction accuracy (e.g., root mean squared error) on a testing set. Measures of fit refer to how well the model aligns with the *training* data set.
+
+The first measure of fit is known as the **residual standard error (RSE)**. Recall that the least squares method seeks to minimize the sum of squared errors in the linear model $y=\beta_0 +\beta_1 x + \epsilon$. This is sometimes referred to as the **residual sum of squares (RSS)**.
+
+$$
+\begin{aligned}
+\text{RSS} &= \sum_i \epsilon_i^2 \\ 
+           &=\sum_i (y_i-\hat{y}_i)^2 \\
+           &=\sum_i (y_i-\hat{\beta}_0-\hat{\beta}_1 x_i)^2
+\end{aligned}
+$$
+
+The RSS indicates the total squared error for the model fit to the training set. A more useful metric is to convert RSS to the *average error* incurred by the model. This is the purpose of RSE.
+
+$$
+\text{RSE} = \sqrt{\frac{\text{RSS}}{n-(p+1)}}
+$$
+
+When averaging the squared error we divide by $n-(p+1)$, where $n$ is the number of observations and $p$ is the number of predictors. In the case of simple linear regression, this adjustment is meant to correct for the bias introduced when estimating $p+1=2$ model parameters ($\beta_0,\beta_1$). We can think of RSE as the average deviation between the response values and the best-fit line in the training set. Another interpretation of RSE is the standard deviation of the irreducible error $\epsilon$ in the linear regression model. In fact, many texts refer to RSE as an estimate of $\sigma$, the true error standard deviation. Let's compute RSE for a familiar example.
+
+We will return to the data set regarding the gestation period of babies from the early 1960s. Load the required packages and import the `Gestation` data frame. We are again interested in the association between gestation period (months) and birth weight (pounds). We begin by wrangling the data and visualizing the association in a scatter plot.
+
+```{r}
+# load packages
+library(mosaicData)
+
+# import data
+data(Gestation)
+
+# wrangle data
+births <- Gestation %>%
+  transmute(
+    months = gestation / 30.42,
+    weight = wt / 16
+  ) %>%
+  na.omit() %>%
+  filter(months > 7, months < 11)
+
+# plot gestation versus weight
+ggplot(data = births, aes(x = months, y = weight)) +
+  geom_point(position = "jitter", alpha = 0.3) +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_x_continuous(limits = c(7, 11), breaks = seq(7, 11, 0.5)) +
+  scale_y_continuous(limits = c(3.5, 11), breaks = seq(3.5, 11, 1)) +
+  labs(
+    x = "Gestation Period (months)",
+    y = "Birth Weight (pounds)"
+  ) +
+  theme_bw()
+```
+
+As before, there appears to be a weak, increasing, linear association between gestation period and birth weight. Next we can fit a simple linear regression model of this association using the `lm()` function and display the full summary output. Here we are treating the full sample as the training data.
+
+```{r}
+# fit regression model
+model <- lm(weight ~ months, data = births)
+
+# display model statistics
+summary(model)
+```
+
+Beyond the coefficient estimates, we now also see a row for `Residual standard error` with a value of 1.029. Thus, the birth weights in the training data differ from the best-fit line by an average of just over one pound. The automated calculation of RSE is a nice feature of the summary output. Otherwise, we would have to compute it ourselves as follows.
+
+```{r}
+# compute RSE
+births %>%
+  mutate(weight_hat = 0.99598 * months - 1.66733) %>%
+  summarize(RSE = sqrt(sum((weight - weight_hat)^2) / 1214))
+```
+
+In general, a smaller RSE suggests a model that better fits the training data. However, it is up to domain experts to decide whether the error is acceptable in the context of the associated research.
+
+# Coefficient of Determination
+
+Another common measure of fit for linear regression models is known as the **coefficient of determination**. But most people refer to it as $R^2$. The letter $R$ refers to its relationship with the correlation coefficient, which often uses a lower case $r$ as notation. The historical use of $r$ for correlation actually refers to "reversion" or "regression" to the mean. In the context of *simple* linear regression, $R^2$ is literally the square of the correlation coefficient. The formula for the correlation coefficient is complex, so we typically employ software to avoid mistakes. Let's demonstrate this for the `Gestation` data.
+
+```{r}
+# compute correlation
+cor(births$weight, births$months, )
+```
+
+The correlation between months of gestation and birth weight is +0.42. Using the typical categorizations of correlation below, we refer to this association as "weak" and positive.
+
+-   Strong: 1 to 0.75
+-   Moderate: 0.75 to 0.50
+-   Weak: 0.50 to 0.25
+-   None: 0.25 to 0
+
+By squaring this value, we obtain the coefficient of determination.
+
+```{r,message=FALSE,warning=FALSE}
+# compute R-squared
+cor(births$weight, births$months)^2
+```
+
+Returning to the summary output for the regression model, we see a row with `Multiple R-squared` and a value of 0.1804. Thus, as with RSE, there is no need to compute $R^2$ manually. In general, values close to 1 indicate a model that fits the data very well, while values close to 0 indicate a poor fit. Consequently, our model for birth weight is relatively weak.
+
+Another popular interpretation of $R^2$ is the "proportion of variance explained" by the model. In this case, we refer to the proportion of variance in the response variable. For the gestation example, 18% of the variance in birth weight can be explained by its linear association with months in the womb. As a result, most of the variability in birth weight remains unexplained. It could be that better explanatory variables exist or that there is simply a great deal of irreducible error in modeling birth weight.
+
+This alternative interpretation for $R^2$ results from a different method of calculation. Namely, we can compute the coefficient of determination in the following way.
+
+$$
+R^2=1-\frac{\text{RSS}}{\text{TSS}}
+$$
+
+The value for RSS is the same as previously described. The **total sum of squares (TSS)** is derived from the error associated with using the *average* response rather than a regression model. We often refer to the average response as the "null" model.
+
+$$
+\text{TSS}=\sum_i (y_i-\bar{y})^2
+$$
+
+For the gestation example, the mean birth weight in the training data is 7.48 pounds. Thus, we could manually compute RSS and TSS as follows.
+
+```{r}
+# compute TSS
+births %>%
+  mutate(
+    weight_hat = 0.99598 * months - 1.66733,
+    weight_bar = 7.48
+  ) %>%
+  summarize(
+    RSS = sum((weight - weight_hat)^2),
+    TSS = sum((weight - weight_bar)^2)
+  )
+```
+
+The ratio of RSS to TSS represents the proportion of variance *remaining* in the model. In this case, about 82% (1285.936/1569.050) of the variance in birth weight remains in the model. By subtracting this proportion from 1, we obtain the variance eliminated (aka "explained"). So, 18% of the variance in birth weight is eliminated by our model.

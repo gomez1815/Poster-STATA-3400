@@ -1,0 +1,145 @@
+---
+title: "Least Squares Method"
+author: "Dr. Josh Jacobson"
+date: "21 January 2026"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE,warning=FALSE,message=FALSE}
+library(here)
+library(knitr)
+library(tinytex)
+library(tidyverse)
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(out.width = "60%", fig.align = "center")
+```
+
+*These lecture notes were originally developed by Dr. Kris Pruitt.*
+
+The purpose of this lesson is to derive and explain the parameter estimates for a simple linear regression model using the least squares criterion. We will leverage methods from both calculus and matrix algebra for the derivation.
+
+# Least Squares Criterion
+
+After visually confirming in a scatter plot that two variables $x$ and $y$ are linearly associated, we wish to estimate the following function.
+
+$$
+y=\beta_0 +\beta_1 x + \epsilon
+$$
+
+This function suggests an underlying linear relationship between the variables while also acknowledging the presence of random error ($\epsilon$). The two unknown parameters $\beta_0$ (intercept) and $\beta_1$ (slope) are what we need to estimate in order to find the best-fit line. By "best" we mean the line that minimizes the sum of squared errors. This is sometimes referred to as the **residual sum of squares (RSS)**. Given a data set $(x_i,y_i)$ for $i=1,...,n$ we seek estimated values $\hat{\beta}_0$ and $\hat{\beta}_1$ that produce the globally minimum value for RSS (shown below). Hence the name "least squares".
+
+$$
+\begin{aligned}
+\text{RSS} &= \sum_i \epsilon_i^2 \\ 
+           &=\sum_i (y_i-\hat{y}_i)^2 \\
+           &=\sum_i (y_i-\hat{\beta}_0-\hat{\beta}_1 x_i)^2
+\end{aligned}
+$$
+
+There are multivariate calculus techniques for minimizing RSS that involve partial derivatives. There are also algorithms from linear algebra that convert the problem to matrix form and solve for the parameters. In either case, the solution for a linear regression problem with a single predictor turns out to be relatively simple. Let $\bar{x}$ and $\bar{y}$ be the sample means for the explanatory and response variables, respectively. Then the best estimates for the slope and intercept parameters are:
+
+$$
+\begin{aligned}
+\hat{\beta}_1 &= \frac{\sum_i(x_i-\bar{x})(y_i-\bar{y})}{\sum_i(x_i-\bar{x})^2} \\
+\hat{\beta}_0 &= \bar{y} - \hat{\beta}_1 \bar{x}
+\end{aligned}
+$$
+
+We'll continue the lesson by deriving this optimal solution in matrix form.
+
+# Matrix Representation
+
+The residual error equations can be written in matrix form as follows:
+
+$$
+\begin{pmatrix}
+\epsilon_1 \\ \epsilon_2 \\ \vdots \\ \epsilon_n
+\end{pmatrix} 
+= 
+\begin{pmatrix}
+y_1 \\ y_2 \\ \vdots \\ y_n
+\end{pmatrix}
+-
+\begin{pmatrix}
+1 & x_1 \\ 1 & x_2 \\ \vdots & \vdots \\ 1 & x_n
+\end{pmatrix}
+\begin{pmatrix}
+\hat{\beta_0} \\ \hat{\beta_1}
+\end{pmatrix}
+$$
+
+For simplicity, we often write these equations using bold-faced letters to represent the vectors and matrices.
+
+$$
+\boldsymbol{\epsilon}=\textbf{y}-\textbf{X} \boldsymbol{\hat{\beta}}
+$$
+
+With this new notation, we can easily represent RSS as:
+
+$$
+\begin{aligned}
+\text{RSS} &= \boldsymbol{\epsilon}^T \cdot \boldsymbol{\epsilon} \\
+&= (\textbf{y}-\textbf{X} \boldsymbol{\hat{\beta}})^T \cdot (\textbf{y}-\textbf{X} \boldsymbol{\hat{\beta}})
+\end{aligned}
+$$
+
+Recall that in matrix algebra we use $T$ to represent the **transpose** of a vector or matrix. The transpose reverses the rows and columns. Take a moment to confirm that this representation is mathematically equivalent to $\sum_i \epsilon_i^2$.
+
+In order to minimize RSS, we use the standard calculus technique of setting the first derivative equal to zero and solving for $\boldsymbol{\hat{\beta}}$. Complete this process and confirm that you obtain the following solution.
+
+$$
+\boldsymbol{\hat{\beta}} = (\textbf{X}^T \textbf{X})^{-1} \cdot \textbf{X}^T \textbf{y}
+$$
+
+This solution produces the minimum RSS as long as $\textbf{X}$ is a **full rank** matrix. The matrix will be full rank when the explanatory variables (columns) are **linearly independent** of one another. The full rank condition ensures that $\textbf{X}^T \textbf{X}$ is invertible and that the critical value $\boldsymbol{\hat{\beta}}$ is a minimum (versus maximum).
+
+# Numerical Example
+
+We will now use a very small numerical example to demonstrate the matrix method in action.
+
+```{r}
+# create data set
+my_data <- data.frame(
+  x = c(0.7, 2.5, 5.1, 7.8, 8.4, 9.9),
+  y = c(-0.38, 8.89, 17.22, 23.74, 22.31, 36.27)
+)
+
+# plot data
+plot(my_data)
+```
+
+In order to apply the matrix solution, we must convert the data to the appropriate form.
+
+```{r}
+# create X matrix
+x_mat <- cbind(rep(1, 6), my_data$x)
+
+# create y vector
+y_vec <- my_data$y
+```
+
+Now we calculate the estimated values for $\boldsymbol{\hat{\beta}}$ using matrix algebra.
+
+```{r}
+# compute beta vector
+solve(t(x_mat) %*% x_mat) %*% t(x_mat) %*% y_vec
+```
+
+The result suggests estimated values of $\hat{\beta}_0=-1.588$ and $\hat{\beta}_1=3.418$. Let's include that line on the graph.
+
+```{r}
+# plot data and best line
+plot(my_data)
+abline(a = -1.588, b = 3.418, col = "blue")
+```
+
+P.S. Thank goodness for the `lm()` function!!
+
+```{r}
+model <- lm(y ~ x, data = my_data)
+coefficients(summary(model))
+```

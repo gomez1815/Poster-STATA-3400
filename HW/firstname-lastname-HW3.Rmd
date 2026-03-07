@@ -1,0 +1,265 @@
+---
+title: "STAT 3400 - Homework 3"
+author: "Taketo Horiogme"
+date: "Due February 1, 2026"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(knitr)
+library(tinytex)
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(out.width = "60%")
+```
+
+
+# Problem 1
+
+The closed-form solution to the least squares optimization problem for simple linear regression is shown below.
+
+$$
+\begin{aligned}
+\hat{\beta}_1 &= \frac{\sum_i(x_i-\bar{x})(y_i-\bar{y})}{\sum_i(x_i-\bar{x})^2} \\
+\hat{\beta}_0 &= \bar{y} - \hat{\beta}_1 \bar{x}
+\end{aligned}
+$$
+
+Using these equations, show that the optimal least squares line always passes through the point $$ (\bar{x},\bar{y}) $$.
+
+
+##### Solution:
+
+
+We are given the closed-form solutions for the least squares estimators in simple linear regression:
+
+\[
+\begin{aligned}
+\hat{\beta}_1 &= \frac{\sum_i (x_i - \bar{x})(y_i - \bar{y})}{\sum_i (x_i - \bar{x})^2}, \\
+\hat{\beta}_0 &= \bar{y} - \hat{\beta}_1 \bar{x}.
+\end{aligned}
+\]
+
+The fitted least squares regression line is
+
+\[
+\hat{y} = \hat{\beta}_0 + \hat{\beta}_1 x.
+\]
+
+To show that this line always passes through the point \((\bar{x}, \bar{y})\), we evaluate the fitted value at \(x = \bar{x}\):
+
+\[
+\hat{y}(\bar{x}) = \hat{\beta}_0 + \hat{\beta}_1 \bar{x}.
+\]
+
+Substituting the expression for \(\hat{\beta}_0\), we obtain:
+
+\[
+\hat{y}(\bar{x}) = (\bar{y} - \hat{\beta}_1 \bar{x}) + \hat{\beta}_1 \bar{x}.
+\]
+
+The \(\hat{\beta}_1 \bar{x}\) terms cancel, leaving:
+
+\[
+\hat{y}(\bar{x}) = \bar{y}.
+\]
+
+Therefore, the least squares regression line always passes through the point \((\bar{x}, \bar{y})\).
+
+
+
+# Problem 2
+
+This problem involves the `Auto` data set from the `ISLR2` library. After loading the library, information about the variables included in the data set can be found by running `?Auto` in the console.
+
+```{r}
+library(ISLR2)
+data(Auto)
+
+```
+
+## Part A
+
+Suppose that we wish to explain a vehicle's gas mileage (`mpg`) based on its acceleration (`acceleration`). Create a scatter plot to explore this relationship and describe the shape, direction, and strength of association. Include the best-fit line in your plot.
+
+
+```{r}
+ggplot(data = Auto, aes(x = acceleration, y = mpg)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = 'lm', se = FALSE) +
+  labs(title = "MPG vs Acceleration",
+       xlabel = "Acceleration",
+       ylabel = "Miles Per Gallon (MPG)")
+
+```
+
+##### Solution:
+
+The relationship between acceleration and gas mileage appears to be positive and approximately linear, with a weak to moderate association. There is considerable variability around the fitted line, indicating that acceleration alone is not a strong predictor of MPG. 
+In practical terms, since higher acceleration values correspond to slower acceleration, this suggests that vehicles that accelerate more slowly tend to have slightly higher gas mileage. However, the substantial scatter in the data indicates that many other factors besides acceleartion influence MPG. 
+
+
+
+
+## Part B
+
+Estimate a simple linear regression model with gas mileage as the response and acceleration as the predictor. What are the point estimates for the model's intercept and slope? What is the R-squared value for the model? Does this indicate a good or poor fit? Explain your answer.
+
+```{r}
+model <- lm(mpg ~ acceleration, data = Auto)
+summary(model)
+
+```
+
+##### Solution:
+
+From the regression output, the estimated intercept is approximately \( \hat{\beta}_0 = 4.83 \), and the estimated slope is \( \hat{\beta}_1 = 1.19 \). This indicates that for each one-unit increase in acceleration, gas mileage is predicted to increase by about 1.19 miles per gallon, on average.
+
+The R-squared value is approximately \( R^2 = 0.179 \), meaning that acceleration explains only about 18% of the variability in gas mileage. This indicates a poor model fit. Although the slope is statistically significant, acceleration alone does not adequately explain differences in MPG, suggesting that additional predictors are needed for accurate modeling.
+
+
+
+## Part C
+
+Depict a 95% confidence interval for the slope parameter on a bootstrap sampling distribution. Use `set.seed(720)` when performing the resampling. Interpret your histogram and interval in the context of the problem.
+
+```{r}
+set.seed(720)
+
+results <- data.frame(slope = rep(NA, 1000))
+
+for (i in 1:1000) {
+  rows <- sample(x = nrow(Auto), size = nrow(Auto), replace = TRUE)
+  resample <- Auto[rows, ]
+  
+  remodel <- lm(mpg ~ acceleration, data = resample)
+  results$slope[i] <- coefficients(summary(remodel))[2,1]
+}
+
+
+ggplot(data= results, aes(x = slope)) +
+  geom_histogram(color = 'black', fill = '#CFB87C', bins = 32) +
+  geom_vline(xintercept = quantile(results$slope, probs = 0.025), color = 'red', linewidth = 1,linetype = 'dashed') +
+  geom_vline(xintercept = quantile(results$slope, probs = 0.975), color = 'red', linewidth = 1, linetype = 'dashed') +
+  labs(title = "Bootstrap Sampling Distribution",
+       x = "Estimated slope (mpg per acceleration)", y = "count") +
+  theme_bw()
+
+```
+
+
+##### Solution:
+
+The bootstrap sampling distribution of the slope is approximately symmetric and centered near the original least squares estimate. The 95% bootstrap confidence interval for the slope does not include zero, indicating that acceleration is a statistically significant predictor of gas mileage. 
+The interval (approximately 0.80 to 1.42 MPG per unit of acceleration) suggests that while the effect is consistently positive, its magnitude is relatively modest. This aligns with the low R-squared value from Part B, reinforcing that acceleration has a real but limited explanatory role in predicting MPG. 
+
+
+# Problem 3
+
+Referring again to the `Auto` data, complete the six steps of a hypothesis test to evaluate evidence that the slope coefficient for acceleration differs from zero. Use `set.seed(720)` when constructing your randomized null distribution and a significance level of $\alpha=0.05$. What do your results suggest, in the context of the problem?
+
+```{r}
+obs_model <- lm(mpg ~ acceleration, data = Auto)
+obs_slope <- coefficients(summary(obs_model))[2, 1]
+
+set.seed(720)
+
+results <- data.frame(slope = rep(NA, 1000))
+
+for (i in 1:1000) {
+  perm_data <- Auto
+  perm_data$mpg <- sample(Auto$mpg, size = nrow(Auto), replace = FALSE) 
+  
+  perm_model <- lm(mpg ~ acceleration, data = perm_data)
+  results$slope[i] <- coefficients(summary(perm_model))[2, 1]
+}
+
+p_value <- mean(abs(results$slope) >= abs(obs_slope))
+
+ggplot(data = results, aes(x = slope)) +
+  geom_histogram(color = "black", fill = "#CFB87C", bins = 32) +
+  geom_vline(xintercept = obs_slope, color = "red", linewidth = 1) +
+  geom_vline(xintercept = -obs_slope, color = "red", linewidth = 1, linetype = "dashed") +
+  labs(
+    title = "Randomization Null Distribution of Slope (H0: slope = 0)",
+    subtitle = paste0("Observed slope = ", round(obs_slope, 3),
+                      " | Randomization p-value = ", signif(p_value, 3)),
+    x = "Slope from permuted mpg",
+    y = "Count"
+  ) +
+  theme_bw()
+
+
+
+```
+
+```{r}
+p_value
+obs_slope
+```
+
+##### Solution:
+The observed slope from the regression of gas mileage on acceleration is 1.20. To test whether this slope differs from zero, a randomization test was performed under the null hypothesis that there is no linear relationship between acceleration and MPG.
+Using 1000 random permutations of the response variable, none of the simulated slopes were as extreme as the observed slope. As a result, the estimated two-sided p-value is effectively 0.
+At the $\alpha=0.05$ significance level, we reject the null hypothesis. There is very strong evidence that the slope coefficient for acceleration differs from zero. In the context of the problem, this suggests a statistically significant linear relationship between acceleration and gas mileage. However, despite this statistical significance, the effect size is modest and acceleration alone explains only a limited portion of the variability in MPG. 
+
+
+# Problem 4
+
+This problem involves the `Boston` data set from the `ISLR2` library. After loading the library, information about the variables included in the data set can be found by running `?Boston` in the console.
+
+```{r}
+data(Boston)
+
+```
+
+## Part A
+
+Suppose that we wish to explain the distance to employment centers (`dis`) based on the proportion of homes built prior to 1940 (`age`). Create a scatter plot to explore this relationship and describe the shape, direction, and strength of association. Include the best-fit line in your plot.
+
+```{r}
+ggplot(data = Boston, aes(x = age, y = dis)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Age vs Distance to employment centers",
+       xlabel = "Proportion of homes built prior to 1940",
+       ylabel = "Distance to employment centers")
+```
+
+
+##### Solution:
+The relationship between `age` and `dis` appears to be negative and approximately linear, with a moderate association. As the proportion of older homes increases, the distance to employment centers tends to decresase. While there is noticeable variability around the fitted line, the downward trend is clear, indicating that neighborhoods with older housing stock tend to be close to employment centers. 
+
+## Part B
+
+Estimate a simple linear regression model with distance as the response and age as the predictor. What are the point estimates for the model's intercept and slope? What is the residual standard error (RSE) for the model? Does this indicate a good or poor fit? Explain your answer.
+
+```{r}
+model2 <- lm(dis ~ age, data = Boston)
+summary(model2)
+
+```
+
+##### Solution:
+The estimated intercept is approximately 7.63 and the estimated slope is approximately -0.056. This indicates that for each one-unit increase in the proportion of homes built prior to 1940, the distance to employment centers is predicated to decrease by about 0.056 units, on average.
+The residual standard error is approximately 1.40, meaning that the typical prediction error is about 1.4 distance units. The R-squared value is 0.559, indicating that age explains about 56% of the variability in distance to employment centers. This suggests a moderately strong fit, through other factors still contribute to variation in distance. 
+
+
+## Part C
+
+Provide a 90% confidence interval for the slope parameter using the summary output of your model and the results of the Central Limit Theorem. Interpret your interval in the context of the problem.
+
+
+```{r}
+
+confint(model2, level = 0.90)
+
+```
+
+##### Solution:
+A 90% confidence interval for the slope coefficient is approximately (-10.65, -9.35).
+Since this interval does not contain zero, we conclude that the slope is statistically different from zero at the 10% significance level. In the context of the problem, this indicates strong evidence of a negative linear relationship between distance to employment centers and the proportion of homes built prior to 1940. Specifically, as distance to employment centers increases by one unit, the proportion of older homes is expected to decrease by about 9 to 11 percentage points, on average. 

@@ -1,0 +1,187 @@
+---
+title: "Technical Conditions (NE)"
+author: "Dr. Josh Jacobson"
+date: "16 February 2026"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE,warning=FALSE,message=FALSE}
+library(here)
+library(knitr)
+library(tinytex)
+library(tidyverse)
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(out.width = "60%", fig.align = "center")
+```
+
+*These lecture notes were originally developed by Dr. Kris Pruitt.*
+
+The purpose of this lesson is to introduce methods for checking the last two technical conditions (assumptions) of linear regression. Specifically, we investigate and diagnose violations of normality and equal variance from the LINE acronym.
+
+# Normality
+
+We will pick up where the previous lesson ended in terms of our example data and model. Specifically, we intend to model a fish's weight (in grams) based on its *cubed* length (in centimeters). We applied the cubic transformation to satisfy the linearity assumption. Import, wrangle, and visualize the data below.
+
+```{r}
+# import and wrangle fish data
+fish <- read_csv("fish.csv") %>%
+  filter(Weight > 0) %>%
+  transmute(Weight,
+    Length = Length1,
+    Cubed_Length = Length^3
+  ) %>%
+  na.omit()
+
+# plot cubed length versus weight
+ggplot(data = fish, aes(x = Cubed_Length, y = Weight)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_x_continuous(limits = c(0, 70000), breaks = seq(0, 70000, 10000)) +
+  scale_y_continuous(limits = c(0, 1200), breaks = seq(0, 1200, 200)) +
+  labs(
+    title = "Fish Caught in Finland",
+    x = "Cubed Length (cm)",
+    y = "Weight (g)",
+    caption = "Brofeldt (1917)"
+  ) +
+  theme_bw()
+```
+
+We estimate the parameters of this model using the least squares method in the code below.
+
+```{r}
+# fit linear regression model
+model <- lm(Weight ~ Cubed_Length, data = fish)
+
+# display parameter estimates
+coefficients(summary(model))
+```
+
+Thus, for every observation $i$ we can compute the residual $\epsilon_i$ using the following formula.
+
+$$
+\epsilon_i=y_i-(9.592 + 0.018x_i^3)
+$$
+
+The third critical assumption of linear regression is focused on the distribution of these residuals. Specifically, that the residuals are **Normally distributed** with a mean of zero. In a scatter plot, this would appear as most of the observations being close to the fitted line and the remaining observations becoming less and less frequent as we move away from the line (above and below). In other words, for a given value of the predictor variable, the observed values for the response should be Normally distributed with a mean centered on the fitted regression line. Though large sample sizes reduce the importance of the Normality assumption, due to the Central Limit Theorem (CLT), it remains critical when constructing prediction intervals for the true response value.
+
+As an initial check on the Normality of the residuals in our fish example, we could simply plot a histogram along with the mean and median.
+
+```{r}
+# add residuals to data
+fish2 <- fish %>%
+  mutate(residuals = resid(model))
+
+# plot histogram of residuals
+ggplot(data = fish2, aes(x = residuals)) +
+  geom_histogram(color = "black", fill = "#CFB87C", bins = 12) +
+  geom_vline(
+    xintercept = mean(fish2$residuals),
+    color = "red", linewidth = 1
+  ) +
+  geom_vline(
+    xintercept = median(fish2$residuals),
+    color = "red", linewidth = 1, linetype = "dashed"
+  ) +
+  labs(
+    x = "Residual Error (g)",
+    y = "Count"
+  ) +
+  theme_bw()
+```
+
+The mean (solid red line) of the residuals does appear to be zero, as required. However, the median (dashed red line) is less than the mean, which indicates a slight positive (right) skew. The shape of the histogram confirms this very minor lack of symmetry. But we must remember that symmetry is not the only characteristic that makes a distribution Normal. A more direct method to assess the Normality of the residuals is a built-in diagnostic plot called a Normal Quantile-Quantile (Q-Q) plot. Let's generate this plot for the fish model.
+
+```{r}
+# display second diagnostic plot
+plot(model, which = 2)
+```
+
+In a Normal Q-Q plot, the $x$-axis indicates what the quantile values *should be* if the residuals are in fact Normally distributed. These theoretical quantiles are based on the known structure of the Standard Normal distribution (e.g., 68-95-99.7 Rule). The $y$-axis indicates what the quantiles values *actually are* for the observed (*standardized*) residuals. If the residuals were perfectly Normally distributed, then every observed value (point in the plot) would be located exactly on the diagonal dashed line that equates theory with reality. In practice, even data sampled directly from a Normal distribution will deviate a little from theory due to natural variability. So, we are not looking for perfection here. Instead, we look for significant deviations from the dashed line.
+
+The Normal Q-Q plot for the fish residuals follows the dashed line relatively well, except for the extreme tails of the distribution. The observed residuals stray below the dashed line for values in the left tail and above the line for values in the right tail. This means the values are further from the mean than they would be under a Normal distribution. For example, Observation 102 should only be about 3 standard errors below the mean according to the theoretical quantiles. Instead it is around 4 standard errors below the mean. A similar situation exists with Observation 30 in the right tail. Its residual value is an extra standard error further from the mean than it should be. There is no set rule for exactly how much the residuals have to deviate from Normality in the Q-Q plot before we label that assumption as violated. We also should not base our decision on only one or two outliers. An analyst must use a bit of judgement in determining what should be considered "significant."
+
+Yet another method for assessing the Normality of the residuals is with a hypothesis test. There are a number of different tests for Normality, but one of the most commonly used is the **Shapiro-Wilk's Test**. The null hypothesis for this test is that the residuals *are* Normally distributed, so rejection suggests there is sufficient evidence that the residuals are *not* Normally distributed. We execute the Shapiro-Wilk's test using the code below.
+
+```{r}
+# run Shapiro-Wilk's test
+shapiro.test(x = fish2$residuals)
+```
+
+The test statistic, $W$, takes values between zero and one, where a value of $W= 1$ corresponds to a perfect diagonal line for the Q-Q plot. Here, the test results in a very small p-value. Thus, we would reject the null hypothesis of Normality. However, we should be careful to consider the difference between statistical significance and practical significance. With relatively large sample sizes ($n \gg 30$), it is easy for such a test to detect even small deviations from Normality. The question is whether those statistical differences are important from a practical standpoint. We observed in two separate visual graphics that the residuals are relatively symmetric and that most of the deviation is in the tails. It is likely these deviations that are causing the rejection in the hypothesis test.
+
+Keep in mind that the Normal residuals assumption is only required when employing theoretical approaches to statistical inference, because we use named sampling (null) distributions like the Standard Normal or t-distribution. In those situations, a violation of the Normality assumption leads to **poorly estimated standard errors** because they do not represent the distribution in use. When applying computational methods, such as bootstrapping or randomization, we do *not* require the Normality condition because we do not assume any named distribution.
+
+# Equal Variance
+
+The final condition in the LINE acronym is **equal variance**. This assumption of linear regression refers to the variance of the residuals across all values of the predictor variable. In many texts, constant variance is referred to as **homoskedasticity**. In some ways, this technical condition is a continuation of the previous. In order to conduct inferential statistical analysis on the parameters of a regression model, we assume that the residuals are Normally distributed with a mean of 0 and a constant standard deviation of $\sigma$. By constant, we mean that $\sigma$ is the same regardless of the input value for the predictor variable(s). We often refer to $\sigma$ as the residual standard error (RSE) and we estimate it from the sample as:
+
+$$
+\hat{\sigma}=\sqrt{\frac{1}{n-1-p} \sum_{i=1}^n (y_i-\hat{y}_i)^2}
+$$
+
+This estimate of the RSE is applied throughout all of the inferential analyses on the regression model. So, if the residuals exhibit non-constant variance, then the inferences on the model parameters will be invalid. The model output in `R` automatically computes the estimate for $\sigma$.
+
+```{r}
+# extract estimated sigma
+summary(model)$sigma
+```
+
+Recall that the RSE is in units of the response variable. In our case that is weight measured in grams. To better visualize the meaning of this value of 78 grams, we recreate an earlier scatter plot and add some annotations.
+
+```{r}
+# plot cubed length versus weight
+ggplot(data = fish2, aes(x = Cubed_Length, y = Weight)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, linewidth = 0.5) +
+  geom_segment(
+    x = 5000, xend = 5000, y = 75, yend = 125, color = "red",
+    arrow = arrow(length = unit(0.03, "npc"), ends = "both")
+  ) +
+  geom_segment(
+    x = 15000, xend = 15000, y = 205, yend = 340, color = "red",
+    arrow = arrow(length = unit(0.03, "npc"), ends = "both")
+  ) +
+  geom_segment(
+    x = 25000, xend = 25000, y = 350, yend = 600, color = "red",
+    arrow = arrow(length = unit(0.03, "npc"), ends = "both")
+  ) +
+  geom_segment(
+    x = 35000, xend = 35000, y = 450, yend = 850, color = "red",
+    arrow = arrow(length = unit(0.03, "npc"), ends = "both")
+  ) +
+  scale_x_continuous(limits = c(0, 70000), breaks = seq(0, 70000, 10000)) +
+  scale_y_continuous(limits = c(0, 1200), breaks = seq(0, 1200, 200)) +
+  labs(
+    title = "Fish Caught in Finland",
+    x = "Cubed Length (cm)",
+    y = "Weight (g)",
+    caption = "Brofeldt (1917)"
+  ) +
+  theme_bw()
+```
+
+In the scatter plot, the arrows approximate the range of observed weights above and below the linear model. Notice that the range is growing as the predictor variable (cubed length) increases. The first arrow has a range of only 50 grams, while the fourth arrow has a range of 400 grams. The RSE value of 78 grams is intended to estimate the average deviation of points from the line across the *entire* model. Yet, this value is clearly more accurate in some segments of the model compared to others. The resulting cone shape is a classic visual indicator of non-constant variance (aka heteroskedasticity). Another diagnostic plot specifically designed to detect heteroskedasticity is the Scale-Location plot.
+
+```{r}
+# plot scale-location
+plot(model, which = 3)
+```
+
+In this plot, we still see the fitted values on the $x$-axis. However, the $y$-axis now employs the square-root of the absolute value of the *standardized* residuals. We standardize to eliminate units unique to the problem, then focus solely on the magnitude of the error using absolute value, and finally take the square-root in order to not overly penalize very large residual values. Ideally, the red line in this plot would be flat. A relatively flat line indicates no significant change in the magnitude of the errors. Instead, we see that the error increases as the fitted values increase. This increasing error agrees with what we observed in the previous two plots.
+
+One final method for checking the constant variance assumption, is a hypothesis test known as the **Breusch-Pagan Test**. The null hypothesis of the test is constant variance (homoskedasticity) and the alternate hypothesis is non-constant variance (heteroskedasticity). Let's run the test using the `bptest()` function from the `lmtest` package.
+
+```{r}
+# load lmtest package
+library(lmtest)
+
+# conduct Breusch-Pagan test
+bptest(model)
+```
+
+The very small p-value suggests we should reject the null hypothesis. In other words, the residuals have non-constant variance. All of our methods for assessing the equal variance assumption agree that the condition is violated. As a result, any inferential analyses we conduct on the parameters of the regression model using mathematical theory (e.g., Central Limit Theorem) are invalid. Typically, we leverage transformations to reduce heteroskedasticity. However, we already transformed our predictor and the problem persists. It could be that other factors, such as fish species, are causing the non-constant variance. If we are unable to resolve the issue, then we must apply computational approaches (e.g., bootstraping) that do not require equal variance.

@@ -1,0 +1,166 @@
+---
+title: "Interaction Terms"
+author: "Dr. Josh Jacobson"
+date: "9 February 2026"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE,message=FALSE,warning=FALSE}
+library(here)
+library(knitr)
+library(tinytex)
+library(tidyverse)
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(out.width = "60%", fig.align = "center")
+```
+
+*These lecture notes were originally developed by Dr. Kris Pruitt.*
+
+The purpose of this lesson is to estimate and interpret a multiple linear regression model with an interaction between predictor variables.
+
+# Interaction Formulation
+
+In our previous discussions of multiple linear regression the relationship between the predictors and the response was **additive**. In other words, the association between an individual predictor and the response is not impacted by the value of other predictors. For some cases this assumption is not appropriate. Often the association between a predictor and response changes based on the value of other predictors. We refer to this synergy as an **interaction**.
+
+Formally, if a predictor variable $x_1$ has a synergistic relationship with another predictor variable $x_2$ then we model the interaction as follows.
+
+$$
+y=\beta_0 +\beta_1 x_1 +\beta_2 x_2 + \beta_3 x_1 x_2 + \epsilon
+$$
+
+Notice we can rewrite this model as:
+
+$$
+y=\beta_0 + (\beta_1 + \beta_3 x_2) x_1 +\beta_2 x_2 + \epsilon
+$$
+
+Now it is clear that the association between $x_1$ and $y$ is not constant. The average change in $y$ imposed by a one unit increase in $x_1$ depends on the value of $x_2$. Given the interaction between $x_1$ and $x_2$, is this still a linear model?
+
+# Inferential Model
+
+For this lesson we'll once again use the data set regarding penguins in the Palmer Archipelago of Antarctica. Load the appropriate libraries and import the data set.
+
+```{r}
+# load libraries
+library(palmerpenguins)
+
+# import data
+data(penguins)
+
+# remove missing observations
+penguins2 <- penguins %>%
+  na.omit()
+
+# view data structure
+glimpse(penguins2)
+```
+
+Suppose we want to predict the flipper length of a penguin based on its bill depth (vertical length). Were we to estimate a simple linear regression model, we would get the blue line in the scatter plot. Does this association make intuitive sense? Why or why not?
+
+```{r}
+# create scatter plot with regression line
+ggplot(data = penguins2, aes(x = bill_depth_mm, y = flipper_length_mm)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+  labs(
+    x = "Bill Depth (mm)",
+    y = "Flipper Length (mm)"
+  ) +
+  theme_bw()
+```
+
+The counter-intuitive relationship between the variables in the scatter plot is a result of a phenomenon known as **Simpson's Paradox**. Depending on how data is grouped, we sometimes witness a complete reversal of the association between variables. In order to reveal the reversal, let's color the points in the scatter plot by species.
+
+```{r}
+# create scatter plot with color by species
+ggplot(data = penguins2, aes(x = bill_depth_mm, y = flipper_length_mm, color = species)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+  labs(
+    x = "Bill Depth (mm)",
+    y = "Flipper Length (mm)",
+    color = "Species"
+  ) +
+  theme_bw()
+```
+
+So, the issue is that the relationship between bill depth and flipper length depends on the species of the penguin. We incorporate this into the model with an interaction term. Recall, since species is a categorical variable we must employ the indicator formulation for each level.
+
+$$
+\begin{align}
+\text{Flipper Length}&=\hat{\beta}_0 + \hat{\beta}_1 \cdot \text{Bill Depth} + \hat{\beta}_2 \cdot \text{Chinstrap} + \hat{\beta}_3 \cdot \text{Gentoo} \\
+&\quad + \hat{\beta}_4 \cdot \text{Chinstrap} \cdot \text{Bill Depth} + \hat{\beta}_5 \cdot \text{Gentoo} \cdot \text{Bill Depth}
+\end{align}
+$$
+
+As with the general interaction equation, we can rewrite this in a form that is easier to interpret.
+
+$$
+\text{Flipper Length}=\hat{\beta}_0 + \hat{\beta}_2 \cdot \text{Chinstrap} + \hat{\beta}_3 \cdot \text{Gentoo} + (\hat{\beta}_1 + \hat{\beta}_4 \cdot \text{Chinstrap} + \hat{\beta}_5 \cdot \text{Gentoo}) \cdot \text{Bill Depth}
+$$
+
+With the rewritten model we see there are three options for the association (slope) between bill depth and flipper length. For Adelies the slope is $\hat{\beta}_1$. For Chinstraps the slope is $\hat{\beta}_1+\hat{\beta}_4$. Finally, for Gentoos the slope is $\hat{\beta}_1+\hat{\beta}_5$. What is the intercept for each species?
+
+In order to find the estimated values for the $\hat{\beta}$ parameters, we employ the `lm()` function. However, we use as asterisk `*` to enforce the interaction.
+
+```{r}
+# fit interaction model
+model <- lm(flipper_length_mm ~ bill_depth_mm * species, data = penguins2)
+
+# view model performance
+summary(model)
+```
+
+As expected, we obtain six parameter estimates. Notice when we enforce the interaction `R` automatically includes the individual variables (main effects) and the products (interactions). In the output, a colon `:` represents the product operator. In general, it is common practice to include main effects in an interaction model, even if their p-values are not significant. This is called the **hierarchical principle**. How would you answer the questions below?
+
+-   How should we interpret the results of the ANOVA?
+-   How should we interpret the p-values associated with each coefficient?
+-   Does the model appear to be a good fit based on RSE and R-squared?
+
+The parameter estimates in the summary output provide the equations for the three colored lines in the last scatter plot. For example, the equation of the blue line for Gentoo penguins is:
+
+$$
+\begin{aligned}
+\text{Flipper Length} &= 159.59 - 13.54 + (1.66 + 3.08) \cdot \text{Bill Depth} \\
+&= 146.05 + 4.74 \cdot \text{Bill Depth}
+\end{aligned}
+$$
+
+Thus, for Gentoo penguins, a one millimeter increase in bill depth is expected to result in a 4.74 millimeter increase in flipper length. Does this interaction model help us better predict flipper length compared to previous models? Let's find out.
+
+# Prediction Model
+
+In order to assess the accuracy of our interaction model, we first split the sample into training and testing sets.
+
+```{r}
+# randomly select training rows
+set.seed(303)
+rows <- sample(x = nrow(penguins2), size = floor(0.75 * nrow(penguins2)), replace = FALSE)
+
+# extract training and testing sets
+training <- penguins2[rows, ]
+testing <- penguins2[-rows, ]
+```
+
+Now we fit the model to the training data and assess its accuracy using the testing data.
+
+```{r}
+# fit model to training set
+model2 <- lm(flipper_length_mm ~ species * bill_depth_mm, data = training)
+
+# predict testing set
+testing_pred <- testing %>%
+  mutate(flipper_pred = predict(model2, newdata = testing))
+
+# compute RMSE
+testing_pred %>%
+  summarize(RMSE = sqrt(mean((flipper_length_mm - flipper_pred)^2)))
+```
+
+Recall, the RMSE for the null model was about 13 mm. The model that used *only* species had an RMSE of about 7 mm. So, the interaction with bill depth is useful compared to species alone.

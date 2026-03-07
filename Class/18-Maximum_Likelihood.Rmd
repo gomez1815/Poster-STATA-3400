@@ -1,0 +1,133 @@
+---
+title: "Maximum Likelihood Method"
+author: "Dr. Josh Jacobson"
+date: "23 February 2026"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE,warning=FALSE,message=FALSE}
+library(here)
+library(knitr)
+library(tinytex)
+library(tidyverse)
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(out.width = "60%", fig.align = "center")
+```
+
+*These lecture notes were originally developed by Dr. Kris Pruitt.*
+
+The purpose of this lesson is to derive and explain the parameter estimates for a simple logistic regression model using the maximum likelihood criterion. We will leverage methods from calculus and linear algebra for the derivation.
+
+# Maximum Likelihood Criterion
+
+After visually confirming in a box plot or scatter plot that a continuous predictor $x$ is associated with a binary response $y$, we wish to estimate the following logistic function.
+
+$$
+p(x)=P(y=1|x)=\frac{1}{1+e^{-(\beta_0+\beta_1 x)}}
+$$
+
+This function suggests an underlying logistic (sigmoid) relationship between the predictor $x$ and the probability that that binary response $y$ is equal to 1. The two unknown parameters $\beta_0$ and $\beta_1$ are what we need to estimate in order to find the best-fit logistic curve. By "best" we mean the curve that maximizes the likelihood of the observed data. This is sometimes referred to as the **likelihood function (L)**. Given a data set $(x_i,y_i)$ for $i=1...n$ we seek estimated values $\hat{\beta}_0$ and $\hat{\beta}_1$ that produce the globally maximum value for L (shown below). Hence the name "maximum likelihood".
+
+$$
+\text{L}=\prod_{i=1}^n [\hat{p}_i^{y_i} \cdot (1-\hat{p}_i)^{1-y_i}]
+$$
+
+When $y_i=1$ we want $\hat{p}_i$ to be as close to 1 as possible. When $y_i=0$ we want $1-\hat{p}_i$ to be as close to 1 as possible. Consequently, we want the product of all the $\hat{p}_i$ and $1-\hat{p}_i$ terms to be as large as possible. This product represents the likelihood of the observed data, assuming observations are independent. What probability distribution does this product remind you of?
+
+For mathematical simplicity, we often maximize the natural logarithm of the likelihood instead. Since the logarithm is a monotonically increasing function, this transformation provides the same optimal solution.
+
+$$
+\text{log(L)}=\sum_{i=1}^n [y_i \log(\hat{p}_i)+(1-y_i)\log(1-\hat{p}_i)]
+$$
+
+In general, the optimal values for $\hat{\beta}_0$ and $\hat{\beta}_1$ cannot be determined explicitly with a closed-form solution. Instead, iterative methods such as *Newton's Method* are employed until they converge on optimal values. Let's briefly outline what that algorithm would entail. First, for simplicity, we'll label $\log(L)$ as $l(\hat{\beta})$ to make clear that the log-likelihood is a function of our estimated $\beta$ parameters. Then, we know the critical values for the parameters must satisfy the following function.
+
+$$
+l'(\hat{\beta})=0
+$$
+
+The notation $l'(\hat{\beta})$ represents the vector of partial derivatives (i.e., gradient) with respect to each $\beta$ parameter. The log-likelihood function $l(\hat{\beta})$ is strictly concave. Thus, to find the $\beta$ estimates that maximize $l(\hat{\beta})$, we need only find the roots of the gradient. Newton's Method is designed for this purpose. At each iteration $(0,1,...,t,t+1,...)$ of the algorithm we find a new vector of parameter estimates $\hat{\beta}$ using the following equation.
+
+$$
+\hat{\beta}_{t+1}=\hat{\beta}_t-l''(\hat{\beta}_t)^{-1}l'(\hat{\beta}_t)
+$$
+
+In this case, $l''(\hat{\beta})$ represents the Hessian matrix of second-order partial derivatives, which must be inverted. Though the mathematical notation may seem daunting, the intuition is simple. At each iteration of the algorithm we obtain better estimates for the $\beta$ parameters, which increase the log-likelihood function. Eventually, the log-likelihood stops increasing and we arrive at the maximum. To further emphasize the iterative nature of the maximum likelihood problem, let's try solving a small problem by hand.
+
+# Numerical Example
+
+We will now use a very small numerical example to demonstrate the log-likelihood function.
+
+```{r}
+# create data set
+my_data <- data.frame(
+  x = c(0.7, 2.5, 5.1, 6.3, 8.4, 9.9),
+  y = c(0, 0, 1, 0, 1, 1)
+)
+
+# plot data
+ggplot(data = my_data) +
+  geom_point(aes(x, y), size = 2) +
+  theme_bw()
+```
+
+Let's start with an initial guess for $\hat{\beta}_0$ and $\hat{\beta}_1$ and compute the log-likelihood.
+
+```{r}
+# pick parameter values
+beta0 <- -6
+beta1 <- 1.5
+
+# estimate probabilities
+my_data2 <- my_data %>%
+  mutate(prob = 1 / (1 + exp(-beta0 - beta1 * x)))
+
+# compute log-likelihood
+my_data2 %>%
+  summarize(sum(y * log(prob) + (1 - y) * log(1 - prob)))
+```
+
+Now let's graph the logistic curve associated with these parameter values.
+
+```{r}
+# plot data and fit curve
+ggplot(data = my_data2) +
+  geom_point(aes(x, y), size = 2) +
+  geom_line(aes(x, prob), color = "blue") +
+  theme_bw()
+```
+
+## Activity
+
+> Can you make adjustments to the parameter values that result in a greater log-likelihood and thus a better fit?
+>
+> Try changing just one parameter at a time to assess the impact on both the log-likelihood value and the fitted curve.
+
+After trying your own values, you've likely seen that it is very difficult to manually choose new parameter estimates that consistently increase the log-likelihood without a structured algorithm. In practice, we determine the optimal values using the `glm()` function. In the help menu for the `glm()` function, you will find reference to a method called **iteratively reweighted least squares (IRLS)**. This is the algorithm `R` uses to solve the maximum likelihood problem for logistic regression. But IRLS is essentially the same as Newton's Method, with only minor adjustments to the Hessian matrix.
+
+```{r}
+# fit model
+model <- glm(y ~ x, data = my_data, family = "binomial")
+
+# summarize results
+summary(model)
+```
+
+How close were your parameter estimates to those found by the algorithm? Notice at the bottom of the output a reference to "Fisher Scoring iterations" and a value of 5. This means the IRLS method required 5 iterations to reach the optimal values for the $\beta$ parameters. We can view the best-fit curve associated with these values below.
+
+```{r}
+# plot data and best curve
+ggplot(data = my_data, aes(x, y)) +
+  geom_point(size = 2) +
+  geom_smooth(
+    formula = y ~ x, method = "glm",
+    method.args = list(family = "binomial"), se = FALSE, color = "blue"
+  ) +
+  theme_bw()
+```

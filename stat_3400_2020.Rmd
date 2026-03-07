@@ -1,0 +1,174 @@
+---
+title: "stat_3400_2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(knitr)
+library(hoopR)
+library(rvest)
+library(stringr)
+library(stringi)
+
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+
+```{r}
+rawgamelogs2 <- read_csv('2020.21.csv')
+print(colnames(rawgamelogs2))
+
+```
+
+
+```{r}
+rawgamelogs2 <- rawgamelogs2 %>% 
+  select(
+    idGame, namePlayer.x, nameTeam, slugOpponent,
+    minutes, pts, ast, treb, stl, blk, tov, pf,
+    fg3m, fpts, pctUSG, Pos, isStarter, locationGame
+  ) %>%
+  rename(
+    GameNo = idGame,
+    Name = namePlayer.x,
+    Team = nameTeam,
+    Opponent = slugOpponent,
+    Minutes = minutes,
+    Points = pts,
+    Assists = ast,
+    Rebounds = treb,
+    Steals = stl,
+    Blocks = blk,
+    TO = tov,
+    PF = pf,
+    FG3M = fg3m,
+    FantasyPoints = fpts,
+    UsageRate = pctUSG,
+    Position = Pos,
+    Starter = isStarter,
+    Location = locationGame
+  )
+
+```
+
+```{r}
+plot_data <- rawgamelogs2 %>%
+  filter(
+    !is.na(FantasyPoints),
+    !is.na(Minutes),
+    !is.na(Points),
+    !is.na(Rebounds),
+    !is.na(Assists)
+  )
+
+```
+
+```{r}
+methods_table <- tibble(
+  Variable = c("FantasyPoints", "Minutes", "UsageRate", "Points", "Assists", "Rebounds"),
+  Meaning = c(
+    "Overall fantasy performance score",
+    "Minutes played in the game",
+    "Percentage of team possessions used by player",
+    "Points scored in the game",
+    "Number of assists",
+    "Number of rebounds"
+  ),
+  Units = c(
+    "Points",
+    "Minutes",
+    "Percent",
+    "Points",
+    "Count",
+    "Count"
+  ),
+  Min = c(
+    min(plot_data$FantasyPoints, na.rm = TRUE),
+    min(plot_data$Minutes, na.rm = TRUE),
+    min(plot_data$UsageRate, na.rm = TRUE),
+    min(plot_data$Points, na.rm = TRUE),
+    min(plot_data$Assists, na.rm = TRUE),
+    min(plot_data$Rebounds, na.rm = TRUE)
+  ),
+  Max = c(
+    max(plot_data$FantasyPoints, na.rm = TRUE),
+    max(plot_data$Minutes, na.rm = TRUE),
+    max(plot_data$UsageRate, na.rm = TRUE),
+    max(plot_data$Points, na.rm = TRUE),
+    max(plot_data$Assists, na.rm = TRUE),
+    max(plot_data$Rebounds, na.rm = TRUE)
+  )
+)
+methods_table
+```
+
+
+
+```{r, width  =5,  height = 5}
+mean_fp <- mean(plot_data$FantasyPoints, na.rm = TRUE)
+q25 <- quantile(plot_data$FantasyPoints, 0.25, na.rm = TRUE)
+q75 <- quantile(plot_data$FantasyPoints, 0.75, na.rm = TRUE)
+ggplot(plot_data, aes(x = FantasyPoints)) +
+  geom_histogram(binwidth = 5, fill = "skyblue", color = "black") +
+  geom_vline(xintercept = mean_fp, color = "red", linewidth = 0.5) +
+  annotate("text", x = mean_fp, y = -10, label = "Mean", color = "red", angle = 0, vjust = -0.5) + 
+  geom_vline(xintercept = q25, color = "darkgreen", linetype = "dashed") +
+  annotate("text", x = q25, y = 0, label = "25%", color = "darkgreen", angle = 0, vjust = -0.5) +
+  geom_vline(xintercept = q75, color = "darkgreen", linetype = "dashed") +
+  annotate("text", x = q75, y = 0, label = "75%", color = "darkgreen", angle = 0, vjust = -0.5) +
+  labs(
+    title = "Distribution of Fantasy Points (2020-21)",
+    x = "Fantasy Points",
+    y = "Count"
+  ) +
+  theme_bw()
+
+
+```
+
+```{r, width = 5, height = 5}
+mean_min <- mean(plot_data$Minutes, na.rm = TRUE)
+q_25_min <- quantile(plot_data$Minutes, 0.25, na.rm = TRUE)
+q_75_min <- quantile(plot_data$Minutes, 0.75, na.rm = TRUE)
+ggplot(plot_data, aes(x = Minutes)) +
+  geom_histogram(binwidth = 2, fill = 'skyblue', color = 'black')+
+  geom_vline(xintercept = mean_min, color = 'red', linewidth = 0.5) +
+  annotate('text', x = mean_min, y = 0, label = 'Mean', color = 'red', angle = 0, vjust = -0.5) +
+  geom_vline(xintercept = q_25_min, color = 'darkgreen', linetype = 'dashed') +
+  annotate('text', x = q_25_min, y = 0, label = '25%', color = 'darkgreen', angle = 0, vjust = -0.5) +
+  geom_vline(xintercept = q_75_min, color = 'darkgreen', linetype = 'dashed') +
+  annotate('text', x = q_75_min, y = 0, label = '75%', color = 'darkgreen', angle = 0, vjust= -0.5) +
+  labs(title = 'Distribution of Minutes Played (2020-21)',
+       x = 'Minutes Played',
+       y = 'Count') +
+  theme_bw()
+```
+
+```{r, warning  = FALSE}
+
+ggplot(plot_data, aes(x = UsageRate, y = FantasyPoints)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "lm", color = "red") +
+  labs(
+    title = "Fantasy Points vs Usage Rate (2020-21)",
+    x = "Usage Rate (%)",
+    y = "Fantasy Points"
+  ) +
+  theme_bw()
+```
+```{r}
+ggplot(plot_data, aes(x = Position, y = FantasyPoints, fill = Starter)) +
+  geom_boxplot(alpha = 0.7) +
+  labs(
+    title = "Fantasy Points by Position and Starter Status",
+    x = "Position",
+    y = "Fantasy Points"
+  ) +
+  theme_bw()
+```
+
+
+
+
+

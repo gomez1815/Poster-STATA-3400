@@ -1,0 +1,319 @@
+---
+title: "STAT 3400 - Homework 5"
+author: "Taketo Horigome"
+date: "Due February 22, 2026"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(knitr)
+library(tinytex)
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(out.width = "60%")
+```
+
+
+# Problem 1
+
+Suppose we obtain the following interaction model with the variables defined below.
+
+$$
+y=50+20x_1+0.07x_2+35x_3+0.01x_1x_2-10x_1x_3
+$$
+
+* Let $y$ be starting salary in thousands (numerical)
+* Let $x_1$ be Grade Point Average (numerical)
+* Let $x_2$ be Intelligence Quotient (numerical)
+* Let $x_3$ be Education Level (binary, 1 for college, 0 for high school)
+
+## Part A
+
+For a fixed value of Grade Point Average (GPA) and Intelligence Quotient (IQ), does the average college graduate *always* have a higher salary than the average high school graduate? Explain your answer based on the estimated model.
+
+#### Solution:
+
+For fired GPA $x_1$ and IQ $x_2$, we want to compare college, $x_3$ = 1, against high school, $x_3$ = 0.
+
+* College:
+
+$y_{college}$ = 50 + 20$x_1$ + 0.07$x_2$ + 35 + 0.01$x_1x_2$ - 10$x_1$
+
+* High School:
+
+$y_{high school}$ = 50 + 20$x_1$ + 0.07$x_2$ + 0 + 0.01$x_1x_2$ + 0
+
+Therefore, the difference between high school graduate and college graduate will be 35 - 10$x_1$, which means college graduate doesn't always have higher starting salary than high school graduate. 
+In summary:
+
+* When $x_1$ < 3.5, college higher
+
+* When $x_1$ = 3.5, both has same starting salary
+
+* When $x_1$ > 3.5, high school earn more 
+
+## Part B
+
+What is the predicted starting salary for a college graduate with an IQ of 110 and a GPA of 4.0? What is the predicted starting salary for a high school graduate with the same IQ and GPA?
+
+#### Solution:
+
+We want to predict where $x_1$ = 4.0 GPA, $x_2$ = 110 IQ, and $x_3$ = 1.
+
+Therefore, $y = 50 + 20 * 4.0 +0.07 * 110 +35 * 1 +0.01 * 4.0 * 110 -10 * 4 * 1 = 50 + 80 + 7.7 + 35 + 4.4 - 40 = 137.1$
+
+Thus, predicted starting salary is $137,00 dollars$.
+
+Whereas, when it comes to the same IQ and GPA for high school graduate, this model will predict as $y = 50 + 20 * 4.0 +0.07 * 110 +35 * 0 +0.01 * 4.0 * 110 -10 * 4 * 0 = 50 + 80 + 7.7 + 0 + 4.4 - 0 = 142.1$
+
+
+Therefore, the predicted salary for high school graduate who has 110 IQ with 4.0 GPA is $142,000 dollars$.
+
+
+## Part C
+
+TRUE or FALSE: Since the coefficient for the GPA and IQ interaction is relatively small (0.01), the interaction term is not a statistically significant predictor of starting salary.  Explain your answer.
+
+#### Solution:
+
+The statistical significance depends on the p-value, which depends on the standard error and sample size.
+So, a small coefficient can still be significant if the standard error is even smaller. Therefore the answer is False, and we need to check p-value.
+
+
+# Problem 2
+
+This question involves the use of multiple linear regression on the `Auto` data set from the `ISLR2` library.
+```{r}
+library(ISLR2)
+auto2 <- Auto %>%
+  select(-year, -origin, -name) %>%
+  na.omit()
+
+```
+
+## Part A
+
+After removing `year`, `origin`, and `name` from the data frame, estimate a multiple linear regression model to explain fuel efficiency (`mpg`) based on the remaining predictors. Then use the `plot()` function on your model object to produce the four default diagnostic plots. Comment on any potential issues you observe in each plot with regard to the technical conditions of linear regression.
+
+```{r}
+fit1 <- lm(mpg ~., data = auto2)
+summary(fit1)
+```
+
+#### Solution:
+
+From this summary by using the model, we got R-squared as 0.7077, and Adjusted R-squared as 0.7039, with overall f-test p-value less than 0.05.
+Thus, the model explains about 71% of the variability in mpg, and the regression is statistically significant overall.
+
+```{r}
+plot(fit1)
+```
+
+#### Solution:
+1. Residuals vs Fitted
+The residual plot shows a noticeable curved pattern rather than random scatter around 0, which suggests that the linearity assumption may be violated, meaning the relationship between mpg and the predictors is not purely linear.
+
+2. Normal Q-Q plot
+Most points follow the reference line in the middle, but there are deviations in the upper tail, which suggests that residuals are approximately normal in the center, but there are may be mild non-normality in the tails.
+
+3. Scale-Location
+The red smooth line trends slightly upward as fitted values increase, which indicates that the variance of residuals increases with fitted values, suggesting mild heteroskedasticity.
+
+4. Residuals vs Leverage
+Most observations have low leverage. A few points have moderate leverage, but none appear to strongly exceed Cook's distance thresholds, thus there is no extreme influential observation. 
+
+## Part B
+
+Experiment with some transformations (e.g., $\sqrt{x}$ or $\log(x)$) of the predictor variables within your model from Part A. Comment on how these transformations impact the diagnostic plots. Do they resolve any issues or do they cause new issues?
+
+```{r}
+auto_tf <- Auto %>%
+  mutate(
+    log_weight = log(weight),
+    log_disp   = log(displacement),
+    sqrt_hp    = sqrt(horsepower)
+  )
+
+fit_auto_tf <- lm(mpg ~ cylinders + log_disp + sqrt_hp + log_weight + acceleration,
+                  data = auto_tf)
+
+summary(fit_auto_tf)
+
+```
+
+#### Solution:
+
+From the summary, the transformed model explains more variability in mpg and has a smaller residual standard error, which indicates an improved overall fit.
+Additionally, after transformation, `log_disp`, `sqrt_hp`, and `log_weight` are statistically significant.
+
+```{r}
+plot(fit_auto_tf)
+```
+
+#### Solution:
+
+1. Residuals vs Fitted 
+Compared to Part (a), the curved pattern is reduced, and the residuals appear more randomly scattered around 0.
+This suggests that the transformations improved the linearity condition, though slight curvature may still remain.
+
+2. Normal Q-Q plot
+The residuals follow the reference line more closely than before, especially in the middle. 
+
+3. Scale-Location
+The upward trend in the red line is less pronounced than in Part (a), which indicates that heteroskedasticity has been partially reduced, through some mild unequal variance may still remain.
+
+4. Residuals vs Leverage
+The leverage pattern does not appear substantially worse than before and no new extreme influential observations are introduced. 
+
+
+Therefore, the transformed model provides a better fit than the orignal linear model from Part (a), though minor deviations from model assumptions still remain.
+
+
+# Problem 3
+
+This question once again references the `Auto` data set from the `ISLR2` library.
+
+## Part A
+
+After removing `year`, `origin`, and `name` from the data frame, create a matrix of pairwise scatter plots using the `pairs()` function. Assuming we intend to define fuel efficiency (`mpg`) as the response variable, comment on any concerns you have regarding multicollinearity among the predictors. Do any of the observed associations make intuitive sense, in the context of the problem?
+
+```{r}
+pairs(auto2)
+```
+
+#### Solution:
+
+The pairs plot reveals strong positive associations among several predictors, particularly:
+
+* cylinders and displacement
+
+* cylinders and horsepower
+
+* displacement and horsepower
+
+* displacement and weight
+
+* horsepower and weight
+
+These relationships appear approximately linear and strongly positive.
+
+This suggests potential multicollinearity among the predictors. Since cylinders, displacement, horsepower, and weight are all related to engine size and vehicle power, including all of them in the same regression model may make it difficult to estimate their individual effects on mpg. Multicollinearity can inflate standard errors and cause predictors to appear statistically insignificant even if they are important.
+
+These associations make intuitive sense in the context of automobiles. Vehicles with more cylinders tend to have larger engine displacement, which typically produces greater horsepower and results in heavier vehicles. Therefore, the observed relationships are expected.
+
+## Part B
+
+Using the same data frame from Part A, create a matrix of correlation coefficients using the `cor()` function and the Spearman method. Do the correlation values support or refute your previous concerns regarding multicollinearity among the predictors? Why was it important we employ the Spearman method for this particular data?
+
+```{r}
+cor(auto2, method = 'spearman')
+```
+
+#### Solution:
+Using the Spearman correlation matrix, we observe several very strong correlations among the predictors:
+
+* displacement and weight: 0.946
+
+* cylinders and displacement: 0.914
+
+* horsepower and weight: 0.879
+
+* displacement and horsepower: 0.876
+
+* cylinders and weight: 0.876
+
+These correlations are all above 0.85 in magnitude, indicating very strong monotonic relationships among these predictors.
+
+This strongly supports the concerns raised in Part (a) regarding multicollinearity. Since cylinders, displacement, horsepower, and weight are all highly correlated, including them together in the same regression model makes it difficult to separate their individual effects on mpg. Multicollinearity can inflate standard errors and lead to unstable coefficient estimates.
+
+## Part C
+
+Compute the variance inflation factor (VIF) for each of the five predictors from the previous two parts of the problem. Do the VIF values support or refute your previous concerns regarding multicollinearity among the predictors?
+
+```{r}
+library(car)
+vif(fit_auto_tf)
+```
+
+#### Solution:
+
+We observe that log_disp (18.69) and log_weight (13.80) have VIF values well above 10, indicating strong multicollinearity. Additionally, cylinders (9.43) and sqrt_hp (9.69) are close to 10, suggesting substantial multicollinearity as well.
+
+In contrast, acceleration (2.99) has a relatively small VIF, indicating it is less strongly correlated with the other predictors.
+
+These results strongly support the concerns raised in Parts (a) and (b). The high correlations among cylinders, displacement, horsepower, and weight are reflected in large VIF values, confirming that these predictors share considerable overlapping information. This multicollinearity may inflate standard errors and make it difficult to estimate the individual effects of these variables on mpg.
+
+# Problem 4
+
+This problem references the `Carseats` data set from the `ISLR2` package. After importing the data, review the included variables using the `?Carseats` command in the Console.
+
+## Part A
+
+Fit a multiple linear regression model to explain `Sales` using `Price`, `Urban`, and `US`. Execute the `summary()` function on your model and use the results to write out the estimated model in equation form. Finally, provide an interpretation of each estimated coefficient in the context of the problem.
+
+```{r}
+fit_cs <- lm(Sales ~ Price + Urban + US, data = Carseats)
+summary(fit_cs)
+```
+
+#### Solution:
+The fitted regression model is:
+${Sales} = 13.403 - 0.05446{Price} - 0.02192{UrbanYes} + 1.20057{USYes}$
+
+Interpreting the coefficients, we see that as Price increases, Sales decrease. Specifically, increasing the price by one unit is associated with a decrease of about 0.054 thousand units sold, and this effect is statistically significant. The coefficient for Urban is very small and not statistically significant, which suggests that being located in an urban area does not meaningfully impact Sales. In contrast, stores located in the US tend to sell about 1.20 thousand more units on average compared to non-US stores, and this effect is statistically significant.
+
+Overall, the model explains about 24% of the variation in Sales, indicating that while these predictors matter, other factors likely also influence Sales.
+
+## Part B
+
+For which of the predictors $x_j$ can you reject the null hypothesis $H_0: \beta_j=0$? Based on your answer to this question, fit a smaller linear regression model that only uses the predictors for which there is evidence of an association with sales. How does this model's quality of fit compare to the larger model?
+
+
+#### Solution:
+From the regression output in Part (a), we can reject the null hypothesis for Price and US because both has very small p-values. We can't reject the null hypothesis for Urban since its p-value is very large, so there is no evidence Urban is associated with Sales after controlling for the other variables.
+So, a smaller model uses only Price and US.
+```{r}
+fit_cs_small <- lm(Sales ~ Price + US, data = Carseats)
+summary(fit_cs_small)
+
+```
+To compare the smaller and larger models, we can look at adjusted R-squared values.
+
+```{r}
+summary(fit_cs)$adj.r.squared
+summary(fit_cs_small)$adj.r.squared
+anova(fit_cs_small, fit_cs)
+```
+
+Based on this, we fit a smaller model using only Price and US. The adjusted R-squared for the full model was 0.2335, while the adjusted R-squared for the smaller model is 0.2354, which is slightly higher. This suggests that removing Urban does not hurt the model's fit and may even slightly improve it.
+
+The ANOVA comparison gives a p-value of 0.9357, indicating that adding Urban does not significantly improve the model. Therefore, the smaller model provides essentially the same fit while being simpler, making it preferable.
+
+## Part C
+
+Produce the four default diagnostic plots for your smaller model from Part B. Comment on any potential issues you observe in each plot with regard to the technical conditions of linear regression.
+
+```{r}
+plot(fit_cs_small)
+```
+
+
+#### Solution:
+
+1. Residuals vs Fitted
+The residuals appear fairly randomly scattered around 0 with no strong curvature pattern. The red smooth line is mostly flat, suggesting that the linearity assumption is reasonably satisfied. There may be a few mild outliers, but no major systematic pattern is evident.
+
+2. Normal Q-Q Plot
+Most points lie close to the reference line, with slight deviations in the tails. This suggests that the residuals are approximately normal, with only minor tail departures.
+
+3. Scale-Location Plot
+The spread of residuals appears relatively constant across fitted values. The red line is fairly flat, indicating that the constant variance (homoscedasticity) assumption is reasonably satisfied, although there may be slight variability in the middle range.
+
+4. Residuals vs Leverage
+Most observations have low leverage. A few points (such as 26, 50, and 368) have slightly higher leverage, but none appear to exceed Cook’s distance thresholds. Therefore, there is no strong evidence of influential observations.
+
+Overall, the diagnostic plots do not show serious violations of the linear regression assumptions. The linearity, normality, and constant variance assumptions appear reasonably satisfied, and there are no extreme influential points. The smaller model seems appropriate for explaining Sales using Price and US.

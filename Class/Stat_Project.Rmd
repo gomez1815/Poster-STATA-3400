@@ -1,0 +1,263 @@
+---
+title: "Stat_Project"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup}
+library(tidyverse)
+library(knitr)
+library(hoopR)
+library(rvest)
+library(stringr)
+library(stringi)
+
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r}
+rawgamelogs <- load_nba_player_box(seasons = 2025)
+
+library(dplyr)
+
+team_totals <- rawgamelogs %>%
+  group_by(game_id, team_id) %>%
+  summarise(
+    team_FGA = sum(field_goals_attempted, na.rm = TRUE),
+    team_FTA = sum(free_throws_attempted, na.rm = TRUE),
+    team_TOV = sum(turnovers, na.rm = TRUE),
+    team_minutes = sum(minutes, na.rm = TRUE)
+  )
+
+rawgamelogs2 <- rawgamelogs %>%
+  left_join(team_totals, by = c("game_id", "team_id"))
+
+rawgamelogs2 <- rawgamelogs2 %>%
+  mutate(
+    USG = 100 *
+      (field_goals_attempted + 0.44 * free_throws_attempted + turnovers) *
+      team_minutes /
+      ((team_FGA + 0.44 * team_FTA + team_TOV) * 5 * minutes)
+  )
+
+rawgamelogs2 <- rawgamelogs2 %>%
+  filter(minutes > 0) %>%
+  filter(USG < 100)
+
+```
+
+
+```{r import_data, include=FALSE}
+
+
+GameLogs <- rawgamelogs2 %>% 
+  select(
+    game_id, game_date, home_away, athlete_display_name, team_display_name,
+    opponent_team_display_name, three_point_field_goals_made, minutes, points,
+    assists, rebounds, steals, blocks, turnovers, fouls, starter, season_type,
+    athlete_position_abbreviation, USG
+  ) %>%
+  rename(
+    GameNo = game_id,
+    Date = game_date,
+    Location = home_away,
+    Name = athlete_display_name,
+    Team = team_display_name,
+    Opponent = opponent_team_display_name,
+    FG3M = three_point_field_goals_made,
+    Minutes = minutes,
+    Points = points,
+    Assists = assists,
+    Rebounds = rebounds,
+    Steals = steals,
+    Blocks = blocks,
+    TO = turnovers,
+    PF = fouls,
+    Starter = starter,
+    SeasonType = season_type,
+    Position = athlete_position_abbreviation,
+    USG = USG
+  ) %>%
+  mutate(
+    FantasyPoints = Points + 1.2 * Rebounds + 1.5 * Assists +
+                    3 * Steals + 3 * Blocks - TO
+  ) %>% na.omit()
+```
+
+
+```{r}
+plot_data <- GameLogs %>%
+  filter(
+    !is.na(FantasyPoints),
+    !is.na(Minutes),
+    !is.na(Points),
+    !is.na(Rebounds),
+    !is.na(Assists),
+    !is.na(USG)
+  )
+```
+
+
+```{r}
+methods_table <- tibble(
+  Variable = c("FantasyPoints", "Minutes", "Points", "Assists", "Rebounds", "Position"),
+  Meaning = c(
+    "Overall player performance score",
+    "Minutes played in the game",
+    "Points scored in the game",
+    "Number of assists",
+    "Number of rebounds",
+    "Player position"
+  ),
+  Units = c(
+    "Points",
+    "Minutes",
+    "Points",
+    "Count",
+    "Count",
+    "Category"
+  ),
+  Min = c(
+    min(plot_data$FantasyPoints, na.rm = TRUE),
+    min(plot_data$Minutes, na.rm = TRUE),
+    min(plot_data$Points, na.rm = TRUE),
+    min(plot_data$Assists, na.rm = TRUE),
+    min(plot_data$Rebounds, na.rm = TRUE),
+    NA
+  ),
+  Max = c(
+    max(plot_data$FantasyPoints, na.rm = TRUE),
+    max(plot_data$Minutes, na.rm = TRUE),
+    max(plot_data$Points, na.rm = TRUE),
+    max(plot_data$Assists, na.rm = TRUE),
+    max(plot_data$Rebounds, na.rm = TRUE),
+    NA
+  ), 
+  Median = c(
+    median(plot_data$FantasyPoints, na.rm = TRUE),
+    median(plot_data$Minutes, na.rm = TRUE),
+    median(plot_data$Points, na.rm = TRUE),
+    median(plot_data$Assists, na.rm = TRUE),
+    median(plot_data$Rebounds, na.rm = TRUE),
+    NA
+  ),
+  Std = c(
+    sd(plot_data$FantasyPoints, na.rm = TRUE),
+    sd(plot_data$Minutes, na.rm = TRUE),
+    sd(plot_data$Points, na.rm = TRUE),
+    sd(plot_data$Assists, na.rm = TRUE),
+    sd(plot_data$Rebounds, na.rm = TRUE),
+    NA
+  )
+)
+
+methods_table
+```
+
+```{r, width  =5,  height = 5}
+mean_fp <- mean(plot_data$FantasyPoints, na.rm = TRUE)
+q25 <- quantile(plot_data$FantasyPoints, 0.25, na.rm = TRUE)
+q75 <- quantile(plot_data$FantasyPoints, 0.75, na.rm = TRUE)
+ggplot(plot_data, aes(x = FantasyPoints)) +
+  geom_histogram(binwidth = 5, fill = "skyblue", color = "black") +
+  geom_vline(xintercept = mean_fp, color = "red", linewidth = 0.5) +
+  annotate("text", x = mean_fp, y = -10, label = "Mean", color = "red", angle = 0, vjust = -0.5) + 
+  geom_vline(xintercept = q25, color = "darkgreen", linetype = "dashed") +
+  annotate("text", x = q25, y = 0, label = "25%", color = "darkgreen", angle = 0, vjust = -0.5) +
+  geom_vline(xintercept = q75, color = "darkgreen", linetype = "dashed") +
+  annotate("text", x = q75, y = 0, label = "75%", color = "darkgreen", angle = 0, vjust = -0.5) +
+  labs(
+    title = "Distribution of Fantasy Points (2024-25)",
+    x = "Fantasy Points",
+    y = "Count"
+  ) +
+  theme_bw()
+
+
+```
+
+```{r, width = 5, height = 5}
+mean_min <- mean(plot_data$Minutes, na.rm = TRUE)
+q_25_min <- quantile(plot_data$Minutes, 0.25, na.rm = TRUE)
+q_75_min <- quantile(plot_data$Minutes, 0.75, na.rm = TRUE)
+ggplot(plot_data, aes(x = Minutes)) +
+  geom_histogram(binwidth = 2, fill = 'skyblue', color = 'black')+
+  geom_vline(xintercept = mean_min, color = 'red', linewidth = 0.5) +
+  annotate('text', x = mean_min, y = 0, label = 'Mean', color = 'red', angle = 0, vjust = -0.5) +
+  geom_vline(xintercept = q_25_min, color = 'darkgreen', linetype = 'dashed') +
+  annotate('text', x = q_25_min, y = 0, label = '25%', color = 'darkgreen', angle = 0, vjust = -0.5) +
+  geom_vline(xintercept = q_75_min, color = 'darkgreen', linetype = 'dashed') +
+  annotate('text', x = q_75_min, y = 0, label = '75%', color = 'darkgreen', angle = 0, vjust= -0.5) +
+  labs(title = 'Distribution of Minutes Played',
+       x = 'Minutes Played',
+       y = 'Count') +
+  theme_bw()
+```
+
+
+```{r}
+mean_usg <- mean(plot_data$USG, na.rm = TRUE)
+q_25_usg <- quantile(plot_data$USG, 0.25, na.rm = TRUE)
+q_75_usg <- quantile(plot_data$USG, 0.75, na.rm = TRUE)
+ggplot(plot_data, aes(x = USG)) +
+  geom_histogram(binwidth = 2, fill = 'skyblue', color = 'black')+
+  geom_vline(xintercept = mean_usg, color = 'red', linewidth = 0.5) +
+  annotate('text', x = mean_usg, y = 0, label = 'Mean', color = 'red', angle = 0, vjust = -0.5) +
+  geom_vline(xintercept = q_25_usg, color = 'darkgreen', linetype = 'dashed') +
+  annotate('text', x = q_25_usg, y = 0, label = '25%', color = 'darkgreen', angle = 0, vjust = -0.5) +
+  geom_vline(xintercept = q_75_usg, color = 'darkgreen', linetype = 'dashed') +
+  annotate('text', x = q_75_usg, y = 0, label = '75%', color = 'darkgreen', angle = 0, vjust= -0.5) +
+  labs(title = 'Distribution of Usage Rate',
+       x = 'Usage Rate',
+       y = 'Count') +
+  theme_bw()
+```
+
+
+
+```{r, warning  = FALSE}
+
+ggplot(plot_data, aes(x = Minutes, y = FantasyPoints, color = Location)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "lm", color = "red") +
+  labs(
+    title = "Fantasy Points vs Minutes Played (2024-25)",
+    x = "Minutes",
+    y = "Fantasy Points"
+  ) +
+  theme_bw()
+```
+
+```{r}
+ggplot(plot_data, aes(x = Position, y = FantasyPoints, fill = Starter)) +
+  geom_boxplot(alpha = 0.7) +
+  labs(
+    title = "Fantasy Points by Position and Starter Status",
+    x = "Position",
+    y = "Fantasy Points",
+    fill = "Starter"
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = c(1, 1),        
+    legend.justification = c(1, 1)
+  )
+
+```
+
+```{r}
+ggplot(plot_data, aes(x = Starter, y = FantasyPoints, fill = Starter)) +
+  geom_boxplot(alpha = 0.7) +
+  labs(
+    title = "Fantasy Points for Starters vs Bench Players",
+    x = "Starter Status",
+    y = "Fantasy Points"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+
+
+
